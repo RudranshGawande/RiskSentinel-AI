@@ -1,0 +1,39 @@
+{
+  "feature_names": [
+    "account_age_days",
+    "total_transactions_user",
+    "avg_amount_user",
+    "amount",
+    "shipping_distance_km",
+    "promo_used",
+    "avs_match",
+    "cvv_result",
+    "three_ds_flag",
+    "country_match",
+    "hour",
+    "dayofweek",
+    "channel_web",
+    "merchant_category_fashion",
+    "merchant_category_gaming",
+    "merchant_category_grocery",
+    "merchant_category_travel"
+  ],
+  "numeric_features": [
+    "account_age_days",
+    "total_transactions_user",
+    "avg_amount_user",
+    "amount",
+    "shipping_distance_km",
+    "promo_used",
+    "avs_match",
+    "cvv_result",
+    "three_ds_flag",
+    "country_match",
+    "hour",
+    "dayofweek"
+  ],
+  "categorical_features": [
+    "channel",
+    "merchant_category"
+  ]
+}

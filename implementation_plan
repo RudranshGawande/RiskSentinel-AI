@@ -1,0 +1,426 @@
+# RiskSentinel AI v2.0 — Production-Grade Architecture Overhaul
+
+Transform the functional prototype into a hackathon-winning, production-grade AI Risk Management platform with multi-model ML, agentic LLM intelligence, and a modern command-center frontend.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **LLM Provider Choice**: The Agentic Risk Investigator needs an LLM API. The plan defaults to **Google Gemini** (free tier available, `google-generativeai` SDK). If you prefer OpenAI, Anthropic, or a local model (Ollama), let me know — it only affects `backend/services/llm_agent.py`.
+
+> [!IMPORTANT]
+> **Redis vs In-Memory Cache**: For hackathon scope, I'm using **`cachetools` (TTL in-memory cache)** instead of Redis. This gives us sub-millisecond cache hits with zero infrastructure overhead. Redis can be swapped in later with a single service change. Acceptable?
+
+> [!WARNING]
+> **Dataset Observation**: The current dataset has 5 merchant categories (`travel`, `fashion`, `electronics`, `grocery`, `gaming`) and 10 countries (`FR`, `US`, `TR`, `PL`, `ES`, `IT`, `RO`, `GB`, `NL`, `DE`). The existing `app.py` only handles 3 merchant categories and 3 countries in its feature engineering — the new system will handle all values dynamically.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Q1**: Do you have a Google Gemini API key (or OpenAI key) ready, or should I build the LLM layer with a graceful fallback that generates template-based reports when no API key is configured?
+
+> [!IMPORTANT]
+> **Q2**: The current `preprocess.py` uses `StandardScaler` + `OneHotEncoder` in a `ColumnTransformer`, but `app.py` does manual feature engineering (hardcoded one-hot columns, no scaling). This means **the current live model predictions are on unscaled, inconsistently-encoded data** — a silent accuracy bug. The v2.0 plan fixes this by persisting the fitted preprocessor and using it at inference time. Confirming you want this fix.
+
+> [!IMPORTANT]
+> **Q3**: The Streamlit dashboard (`dashboard.py`) — should I keep it as an optional legacy interface alongside the new React frontend, or fully deprecate it?
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Frontend — React + Vite + Tailwind"
+        UI["AI Command Center"]
+        TX["Transaction Evaluator"]
+        CHAT["Risk Co-Pilot Chat"]
+        CHARTS["Financial Impact Dashboards"]
+        STREAM["Live Audit Stream"]
+    end
+
+    subgraph "Backend — Async FastAPI"
+        GW["API Gateway + CORS"]
+        
+        subgraph "Routers"
+            R1["/api/assess-risk"]
+            R2["/api/audit"]
+            R3["/api/analytics"]
+            R4["/api/copilot/chat"]
+            R5["/api/health"]
+        end
+
+        subgraph "Services Layer"
+            ML["ML Engine<br/>(XGBoost + IsolationForest)"]
+            SHAP_S["SHAP Explainer"]
+            LLM["LLM Agent<br/>(Threat Intel Reports)"]
+            CACHE["TTL Cache Layer"]
+            DB["Async SQLite"]
+        end
+    end
+
+    subgraph "ML Pipeline — Offline"
+        PP["preprocess.py"]
+        TR1["train_xgboost.py"]
+        TR2["train_anomaly.py"]
+        EV["evaluate.py"]
+    end
+
+    subgraph "Artifacts"
+        M1["xgboost_model.pkl"]
+        M2["isolation_forest.pkl"]
+        M3["preprocessor.pkl"]
+        M4["shap_explainer.pkl"]
+        M5["audit_trail.db"]
+    end
+
+    UI --> GW
+    GW --> R1 & R2 & R3 & R4 & R5
+    R1 --> CACHE --> ML --> SHAP_S
+    R1 --> DB
+    R1 --> LLM
+    R4 --> LLM
+    R2 --> DB
+    R3 --> DB
+    ML -.loads.-> M1 & M2 & M3
+    SHAP_S -.loads.-> M4
+    PP --> TR1 & TR2
+    TR1 & TR2 --> EV
+```
+
+---
+
+## Proposed Directory Structure
+
+```
+razorpay-risk-sentinel/
+│
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                    # FastAPI app factory, CORS, lifespan
+│   │   ├── config.py                  # Pydantic Settings (env vars, paths)
+│   │   │
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── risk.py                # POST /api/assess-risk (core endpoint)
+│   │   │   ├── audit.py               # GET /api/audit (paginated log viewer)
+│   │   │   ├── analytics.py           # GET /api/analytics/* (dashboard data)
+│   │   │   └── copilot.py             # POST /api/copilot/chat (LLM chat)
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── ml_engine.py           # XGBoost + IsolationForest dual-scoring
+│   │   │   ├── explainer.py           # SHAP-based feature attribution
+│   │   │   ├── llm_agent.py           # Agentic LLM threat investigator
+│   │   │   ├── cache.py               # TTL in-memory cache (cachetools)
+│   │   │   └── database.py            # Async SQLite (aiosqlite) manager
+│   │   │
+│   │   └── models/
+│   │       ├── __init__.py
+│   │       └── schemas.py             # All Pydantic request/response models
+│   │
+│   ├── ml/
+│   │   ├── preprocess.py              # Enhanced preprocessing + saves preprocessor.pkl
+│   │   ├── train_xgboost.py           # XGBoost training with class weighting
+│   │   ├── train_anomaly.py           # Isolation Forest on normal transactions
+│   │   └── evaluate.py                # Unified eval: metrics, financial impact, SHAP
+│   │
+│   ├── artifacts/                     # All saved model files
+│   │   ├── xgboost_model.pkl
+│   │   ├── isolation_forest.pkl
+│   │   ├── preprocessor.pkl
+│   │   └── feature_names.json
+│   │
+│   ├── data/
+│   │   └── transactions.csv           # (moved from root)
+│   │
+│   ├── audit_trail.db                 # SQLite audit database
+│   ├── requirements.txt               # Clean Python dependencies
+│   └── run.py                         # Uvicorn launcher script
+│
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── index.html
+│   │
+│   └── src/
+│       ├── main.jsx                   # React entry point
+│       ├── App.jsx                    # Root component + routing
+│       ├── index.css                  # Tailwind + custom design tokens
+│       │
+│       ├── components/
+│       │   ├── layout/
+│       │   │   ├── Sidebar.jsx        # Navigation sidebar
+│       │   │   └── Header.jsx         # Top bar with status indicators
+│       │   │
+│       │   ├── dashboard/
+│       │   │   ├── RiskGauge.jsx      # Animated risk score gauge
+│       │   │   ├── StatsCards.jsx     # KPI metric cards
+│       │   │   ├── FinancialChart.jsx # Fraud loss vs friction cost chart
+│       │   │   └── AuditTable.jsx     # Sortable, filterable audit trail
+│       │   │
+│       │   ├── transaction/
+│       │   │   ├── TransactionForm.jsx    # Transaction submission form
+│       │   │   └── RiskResultCard.jsx     # Risk assessment result display
+│       │   │
+│       │   └── copilot/
+│       │       ├── ChatInterface.jsx      # LLM chat UI
+│       │       └── ThreatReport.jsx       # Rendered threat intel report
+│       │
+│       ├── pages/
+│       │   ├── CommandCenter.jsx      # Main dashboard page
+│       │   ├── TransactionEval.jsx    # Single transaction evaluator
+│       │   └── CoPilot.jsx           # Risk Co-Pilot chat page
+│       │
+│       ├── hooks/
+│       │   └── useApi.js             # Shared API fetch hooks
+│       │
+│       └── lib/
+│           ├── api.js                # API client (fetch wrapper)
+│           └── constants.js          # Colors, thresholds, etc.
+│
+├── dashboard.py                       # (Legacy Streamlit — kept but deprecated)
+└── README.md                          # Updated project documentation
+```
+
+---
+
+## Proposed Changes
+
+### Component 1 — ML Pipeline Overhaul
+
+#### [NEW] [`backend/ml/preprocess.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/ml/preprocess.py)
+
+Enhanced preprocessing that **persists the fitted `ColumnTransformer`** to `preprocessor.pkl` so the API can apply identical transformations at inference time. Key changes:
+- Saves `preprocessor.pkl` alongside the data — eliminates the current bug where `app.py` does manual (inconsistent) feature engineering
+- Saves `feature_names.json` mapping for SHAP interpretability
+- Handles all 5 merchant categories and 10 countries from the dataset (not just 3)
+- Same stratified 80/20 split with `random_state=42` — zero leakage
+
+#### [NEW] [`backend/ml/train_xgboost.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/ml/train_xgboost.py)
+
+Replaces the Decision Tree with **XGBoost** (`XGBClassifier`):
+- `scale_pos_weight` calculated from class imbalance ratio (~13.3:1) for proper fraud recall
+- `max_depth=6`, `n_estimators=200`, `learning_rate=0.1`, `eval_metric='aucpr'`
+- Saves to `artifacts/xgboost_model.pkl`
+- Generates and saves a SHAP `TreeExplainer` to `artifacts/shap_explainer.pkl`
+
+**Why XGBoost over Deep Learning**: For 300K tabular rows with 17 features, XGBoost consistently outperforms neural networks on fraud detection benchmarks. It's also natively explainable via SHAP TreeExplainer (exact, not approximate). This is the right call for hackathon judging — "we chose the empirically best model" > "we used deep learning because it sounds cool."
+
+#### [NEW] [`backend/ml/train_anomaly.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/ml/train_anomaly.py)
+
+Adds an **Isolation Forest** unsupervised anomaly detector:
+- Trained on **non-fraud transactions only** from the training set (learns "normal" behavior)
+- `contamination=0.02` (matching the ~2.2% fraud rate)
+- At inference, outputs an anomaly score [-1, 1] that acts as a **second opinion** alongside XGBoost
+- Catches zero-day fraud patterns the supervised model hasn't seen
+
+#### [NEW] [`backend/ml/evaluate.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/ml/evaluate.py)
+
+Unified evaluation script:
+- Classification metrics: Precision, Recall, F1, AUC-PR, AUC-ROC
+- Confusion matrix with financial impact (₹1,500 FP cost, ₹4,000 FN loss)
+- SHAP summary plot saved as image for the dashboard
+- Comparison output: Decision Tree vs XGBoost performance
+
+---
+
+### Component 2 — Async FastAPI Backend
+
+#### [NEW] [`backend/app/main.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/main.py)
+
+App factory with:
+- `lifespan` context manager to load all ML models once at startup (not per-request)
+- CORS middleware configured for the React frontend (`localhost:5173`)
+- Global exception handler returning structured JSON errors (never raw 500s)
+
+#### [NEW] [`backend/app/config.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/config.py)
+
+`pydantic-settings` based config:
+- `LLM_API_KEY`, `LLM_MODEL_NAME` (env vars)
+- `DB_PATH`, `ARTIFACTS_DIR` (path config)
+- Risk thresholds (`LOW_RISK_CEILING=0.35`, `HIGH_RISK_FLOOR=0.70`)
+- Financial cost constants (`FP_FRICTION_COST=1500`, `FN_FRAUD_LOSS=4000`)
+
+#### [NEW] [`backend/app/models/schemas.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/models/schemas.py)
+
+Pydantic v2 models with **`Optional` fields + defaults** for fault tolerance:
+- `TransactionPayload` — all fields from the current schema, but with graceful defaults for missing optional fields (e.g., `shipping_distance_km: float = 0.0`)
+- `RiskAssessmentResponse` — typed response including `shap_explanations: dict[str, float]`, `anomaly_score: float`, `threat_report: str | None`
+- `CopilotMessage` / `CopilotResponse` — chat interface schemas
+- `AuditLogEntry`, `AnalyticsResponse` — dashboard data models
+
+#### [NEW] [`backend/app/services/ml_engine.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/services/ml_engine.py)
+
+Core scoring engine:
+```
+score_transaction(raw_features) -> {
+    xgboost_probability: float,      # Primary fraud probability
+    anomaly_score: float,            # Isolation Forest anomaly score
+    combined_risk_score: float,      # Weighted: 0.7 * xgb + 0.3 * anomaly
+    risk_category: str,              # LOW / MEDIUM / HIGH
+    action: str,                     # AUTO_APPROVE / STEP_UP / BLOCK
+    shap_values: dict[str, float]    # Per-feature attribution
+}
+```
+- Loads the fitted `preprocessor.pkl` and applies it to raw input — **fixing the current preprocessing mismatch bug**
+- Dual-model scoring: XGBoost (supervised) + Isolation Forest (unsupervised)
+- Combined risk score with configurable weighting
+- SHAP feature attributions generated per-transaction for explainability
+
+#### [NEW] [`backend/app/services/llm_agent.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/services/llm_agent.py)
+
+**Autonomous Risk Investigator** — the standout AI feature:
+- Triggered automatically when `risk_category == HIGH_RISK`
+- Available on-demand via the `/api/copilot/chat` endpoint
+- The LLM receives a structured prompt containing:
+  - Transaction payload data
+  - Risk score + SHAP feature attributions (which features drove the decision)
+  - Anomaly score context
+  - Historical user behavior (queried from audit trail)
+- Outputs a **"Threat Intelligence Report"** with:
+  - Risk summary in plain English
+  - Top contributing risk factors (from SHAP)
+  - Behavioral anomaly analysis
+  - Recommended defensive action with justification
+- **Graceful fallback**: If no LLM API key is configured, generates a structured template-based report from SHAP values (still useful, just not natural language)
+
+#### [NEW] [`backend/app/services/cache.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/services/cache.py)
+
+`cachetools.TTLCache` wrapper:
+- Cache key: hash of the feature vector (not transaction_id, since same user can have different risk profiles over time)
+- TTL: 300 seconds (5 minutes)
+- Max size: 10,000 entries
+- Cache hit returns pre-computed risk score in <1ms
+
+#### [NEW] [`backend/app/services/database.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/services/database.py)
+
+Async SQLite via `aiosqlite`:
+- Enhanced schema with new columns: `anomaly_score`, `shap_top_features`, `threat_report`, `model_version`
+- `INSERT OR REPLACE` semantics to handle duplicate transaction IDs gracefully (fixes the current `IntegrityError` crash)
+- Pagination support for audit log queries
+- Analytics aggregation queries (risk distribution, daily fraud trends, financial impact totals)
+
+#### [NEW] [`backend/app/routers/risk.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/routers/risk.py)
+
+`POST /api/assess-risk` — fully async flow:
+1. Validate payload (Pydantic, graceful defaults)
+2. Check cache → return if hit
+3. Run ML engine (XGBoost + Isolation Forest + SHAP)
+4. If HIGH_RISK → fire LLM agent (async, non-blocking)
+5. Log to SQLite audit trail
+6. Cache the result
+7. Return structured response with explanation
+
+#### [NEW] [`backend/app/routers/audit.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/routers/audit.py)
+
+- `GET /api/audit?page=1&limit=25&category=HIGH_RISK` — paginated, filterable audit log
+- `GET /api/audit/{transaction_id}` — single transaction detail with full threat report
+
+#### [NEW] [`backend/app/routers/analytics.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/routers/analytics.py)
+
+- `GET /api/analytics/summary` — KPI cards (total assessed, blocked, approved, avg latency)
+- `GET /api/analytics/financial-impact` — running FP/FN cost totals
+- `GET /api/analytics/risk-distribution` — category breakdown for pie/bar charts
+- `GET /api/analytics/timeline` — time-series risk trend data
+
+#### [NEW] [`backend/app/routers/copilot.py`](file:///d:/Coding/Machine%20Learning/razorpay-risk-sentinel/backend/app/routers/copilot.py)
+
+- `POST /api/copilot/chat` — send a natural language question about a transaction → LLM responds with analysis
+- Context: the LLM has access to the transaction data, SHAP values, anomaly scores, and audit history
+
+---
+
+### Component 3 — React Frontend (AI Command Center)
+
+#### Technology Choices
+- **Vite + React 18** — fast dev server, instant HMR
+- **Tailwind CSS v3** — utility-first, dark-mode-first design
+- **Recharts** — React-native charting for financial impact visualizations
+- **Lucide React** — modern icon set
+- **React Router v6** — client-side routing
+
+#### Design Language
+- **Dark mode primary** with glassmorphism cards (`backdrop-blur`, semi-transparent backgrounds)
+- Color palette: Slate-900 base, Emerald for safe/approved, Amber for medium/step-up, Rose for high/blocked
+- Smooth micro-animations on state transitions (risk gauge, card entries)
+- Monospace typography for scores/IDs (JetBrains Mono), Inter for body text
+
+#### Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| **Command Center** | `/` | Main dashboard: KPI cards, risk distribution chart, financial impact chart, live audit stream |
+| **Transaction Evaluator** | `/evaluate` | Form to submit a transaction + animated result card with SHAP waterfall breakdown |
+| **Risk Co-Pilot** | `/copilot` | Chat interface with the LLM risk investigator, transaction context sidebar |
+
+#### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `Sidebar.jsx` | Dark glass navigation rail with route links and system status |
+| `StatsCards.jsx` | 4 animated KPI cards (Total Assessed, Blocked, Money Saved, Avg Latency) |
+| `RiskGauge.jsx` | Animated radial gauge showing risk score 0→1 with color transitions |
+| `FinancialChart.jsx` | Dual-axis Recharts bar chart: FP friction cost vs FN fraud losses |
+| `AuditTable.jsx` | Sortable, filterable table with risk-category color coding and row expansion |
+| `TransactionForm.jsx` | Styled form with all payload fields, smart defaults, submit button |
+| `RiskResultCard.jsx` | Glass card showing score, category, action, SHAP attributions, threat report |
+| `ChatInterface.jsx` | Chat bubbles UI with message input, streaming-style response rendering |
+
+---
+
+## Implementation Sequence
+
+I will execute the build in this order to ensure each layer is testable before the next:
+
+| Phase | Files | Dependency |
+|-------|-------|------------|
+| **Phase 1**: ML Pipeline | `preprocess.py` → `train_xgboost.py` → `train_anomaly.py` → `evaluate.py` | None (standalone scripts) |
+| **Phase 2**: Backend Core | `config.py` → `schemas.py` → `database.py` → `cache.py` → `ml_engine.py` | Phase 1 artifacts |
+| **Phase 3**: LLM Agent | `llm_agent.py` | Phase 2 services |
+| **Phase 4**: API Routers | `main.py` → `risk.py` → `audit.py` → `analytics.py` → `copilot.py` | Phase 2+3 services |
+| **Phase 5**: Frontend | Vite scaffold → design system → layout → pages → components | Phase 4 API |
+| **Phase 6**: Integration | End-to-end testing, polish, README | All phases |
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+# Phase 1: ML Pipeline
+cd backend/ml
+python preprocess.py        # Should output train/test shapes + save preprocessor.pkl
+python train_xgboost.py     # Should output AUC-PR + save model
+python train_anomaly.py     # Should output contamination stats + save model
+python evaluate.py          # Should output full metrics comparison
+
+# Phase 4: Backend API
+cd backend
+python run.py &             # Start server on :8000
+curl http://localhost:8000/api/health                    # Should return {"status": "ok"}
+curl -X POST http://localhost:8000/api/assess-risk \
+  -H "Content-Type: application/json" \
+  -d '{"transaction_id":"TEST_001","user_id":"USR_1","amount":5000,...}'
+# Should return risk_score, category, shap_explanations, anomaly_score
+
+# Phase 5: Frontend
+cd frontend
+npm run dev                 # Should serve on :5173
+# Visual verification of all 3 pages
+```
+
+### Manual Verification
+- Submit transactions across all 3 risk bands and verify correct gating actions
+- Verify SHAP explanations change meaningfully with different inputs
+- Test the Co-Pilot chat with questions like "Why was this transaction flagged?"
+- Verify audit trail captures all new fields (anomaly_score, shap_top_features, threat_report)
+- Test fault tolerance: submit payloads with missing optional fields
+- Test duplicate transaction_id handling (should not crash)
+- Verify financial impact charts show correct FP/FN cost calculations
