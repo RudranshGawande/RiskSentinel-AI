@@ -3,11 +3,51 @@ import axios from 'axios';
 import {
   Activity, ShieldAlert, CheckCircle, Search,
   AlertTriangle, ArrowUpRight, ArrowDownRight, Info, Shield,
-  Zap, Clock
+  Zap, Clock, Bug, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, humanizeFeature, explainImpact } from '../lib/constants';
 import ThreatReportCard from '../components/transaction/ThreatReportCard';
+import DeveloperWebhookTerminal from '../components/dashboard/DeveloperWebhookTerminal';
+import React from 'react';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    this.setState({ error, errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center bg-rose-500/10 border border-rose-500/30 rounded-xl">
+          <AlertCircle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
+          <h3 className="font-semibold text-rose-300 mb-2">Something went wrong rendering the transaction detail</h3>
+          <pre className="text-xs text-rose-200 bg-zinc-900 p-3 rounded text-left overflow-auto max-h-64">
+            {this.state.error && this.state.error.toString()}
+            {this.state.errorInfo && '\n\n' + this.state.errorInfo.componentStack}
+          </pre>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+            className="mt-4 px-4 py-2 bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-lg hover:bg-rose-500/30 transition-colors text-sm font-medium"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export function StatCard({ title, value, icon, color = "blue" }) {
   const bgMap = {
@@ -308,12 +348,19 @@ export default function CommandCenter() {
 
   const fetchTxDetails = async (tx, itemKey) => {
     try {
+      console.log("[CommandCenter] Fetching transaction details for:", tx);
       setSelectedItemKey(itemKey);
       const queryParam = tx.id != null ? tx.id : tx.transaction_id;
+      console.log("[CommandCenter] Query param:", queryParam);
       const res = await axios.get(`${API_URL}/api/audit/${queryParam}`);
+      console.log("[CommandCenter] Audit response:", res.data);
       setTxDetails(res.data);
     } catch (err) {
-      console.error("Failed to fetch transaction details", err);
+      console.error("[CommandCenter] Failed to fetch transaction details:", err);
+      if (err.response) {
+        console.error("[CommandCenter] Response status:", err.response.status);
+        console.error("[CommandCenter] Response data:", err.response.data);
+      }
     }
   };
 
@@ -352,7 +399,7 @@ export default function CommandCenter() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start mb-6">
         <div className="lg:col-span-5 flex flex-col">
           <div className="bg-[#13151B] border border-gray-800 rounded-2xl flex flex-col overflow-hidden p-5 h-[calc(100vh-16rem)] min-h-[560px]">
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -425,7 +472,9 @@ export default function CommandCenter() {
           <div className="bg-[#13151B] border border-gray-800 rounded-2xl shadow-sm flex flex-col h-[calc(100vh-16rem)] min-h-[560px] overflow-hidden">
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
               {txDetails ? (
-                <TransactionDetail tx={txDetails} />
+                <ErrorBoundary>
+                  <TransactionDetail tx={txDetails} />
+                </ErrorBoundary>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-center p-8">
                   <div className="w-16 h-16 rounded-2xl bg-secondary/50 flex items-center justify-center mb-4">
@@ -438,6 +487,12 @@ export default function CommandCenter() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="w-full">
+        <ErrorBoundary>
+          <DeveloperWebhookTerminal latestTransaction={txDetails} />
+        </ErrorBoundary>
       </div>
     </div>
   );

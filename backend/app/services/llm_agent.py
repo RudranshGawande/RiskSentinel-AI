@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import traceback
+from collections import defaultdict
 from typing import Optional, Dict, Any, List
 
 from dotenv import load_dotenv
@@ -226,22 +227,29 @@ class LLMAgent:
     def _get_chat_system_prompt(self) -> str:
         """System prompt for conversational Co-Pilot chat."""
         return (
-            "You are the RiskSentinel AI Investigator, an expert fraud analyst for e-commerce.\n"
+            "You are the RiskSentinel AI Investigator, an expert fraud analyst for e-commerce and Indian digital payments.\n"
             "You have full access to live transaction telemetry, risk model scores, user history, "
-            "and live Razorpay Payment Gateway API telemetry (orders, payment statuses, receipt IDs, and gateway notes).\n\n"
+            "live Razorpay Payment Gateway API telemetry (orders, payment statuses, receipt IDs, and gateway notes), "
+            "and FRAUD RING NETWORK ANALYSIS GRAPH DATA showing connections between transactions "
+            "sharing IP addresses, Card BINs, device fingerprints, or shipping addresses within velocity windows.\n\n"
             "MANDATORY CONSISTENCY & ACCURACY GUARDRAILS:\n"
             "1. CRITICAL: Maintain 100% internal numerical consistency across your entire response.\n"
             "2. Never state that a user has '0 prior orders' or 'no prior history' if historical assessment data shows prior transaction history.\n"
             "3. Ensure every top SHAP driver (including AVS address check, CVV status, order amount, shipping distance, and account age) is explicitly mentioned if it contributed to the risk score.\n"
             "4. When asked about payments, Razorpay orders, receipt status, or checkout details, reference the live Razorpay API order telemetry provided in the context.\n"
-            "5. Base your answers STRICTLY on the provided data. Do not hallucinate or invent reasons.\n"
-            "6. Keep your tone professional, analytical, and conversational. Do not output raw JSON or robotic templates.\n"
-            "7. NEVER mention Claude, Anthropic, Gemini, Google, OpenAI, GPT, or ANY external AI brand or model name. You are 'RiskSentinel AI Investigator'.\n"
-            "8. NEVER use ML jargon (no 'SHAP', 'feature importance', 'XGBoost', 'Isolation Forest', 'gradient boosting'). Refer to them as 'Pattern Recognition Engine' and 'Anomaly Detection Engine'.\n"
-            "9. 3-TIER ADAPTIVE AUTHENTICATION (Smart 3DS) POLICY: "
+            "5. CRITICAL NETWORK ANALYSIS: If the network analysis graph (risk_network_data) shows the current user is linked via shared IP to multiple previously blocked transactions (Velocity Attack), EXPLICITLY mention this as a severe risk-increasing factor: *'Fraud Ring Network detected: This transaction is behaviorally linked to X previously blocked attempts sharing the same proxy IP address.'* Similarly, flag shared Card BINs, device fingerprints, or shipping addresses across multiple suspicious transactions.\n"
+            "6. CRITICAL UPI FRAUD INTELLIGENCE: If the transaction uses UPI (payment_method='upi'), you MUST evaluate:\n"
+            "   - Device Binding Verified: If FAILED (device_binding_verified=0), EXPLICITLY state: *'CRITICAL RISK: UPI Device Binding failure detected. This strongly indicates a SIM-swapping or remote-access screen-sharing attack, which is a primary vector for UPI fraud in India. Transaction blocked to protect merchant from immediate UPI dispute.'*\n"
+            "   - VPA Age > 30 Days: If FAILED (vpa_age_verified=0), state: *'ELEVATED RISK: VPA handle is less than 30 days old. Newly created VPA handles are frequently used in social engineering and phishing campaigns.'*\n"
+            "   - High Amount + Failed Binding: If amount > ₹25,000 AND device binding failed, state: *'SEVERE RISK: High-value UPI transaction on unbound device. Immediate block recommended per NPCI fraud mitigation guidelines.'*\n"
+            "7. Base your answers STRICTLY on the provided data. Do not hallucinate or invent reasons.\n"
+            "8. Keep your tone professional, analytical, and conversational. Do not output raw JSON or robotic templates.\n"
+            "9. NEVER mention Claude, Anthropic, Gemini, Google, OpenAI, GPT, or ANY external AI brand or model name. You are 'RiskSentinel AI Investigator'.\n"
+            "10. NEVER use ML jargon (no 'SHAP', 'feature importance', 'XGBoost', 'Isolation Forest', 'gradient boosting'). Refer to them as 'Pattern Recognition Engine' and 'Anomaly Detection Engine'.\n"
+            "11. 3-TIER ADAPTIVE AUTHENTICATION (Smart 3DS) POLICY: "
             "When asked about medium-risk orders (risk score 30%–75%), explain: "
             "\"This transaction fell into the Medium Risk category (30-75%), so instead of blocking the buyer, RiskSentinel triggered Step-Up Authentication (3DS OTP challenge) to protect merchant revenue while verifying card ownership.\"\n"
-            "10. Keep responses conversational, specific, and concise."
+            "12. Keep responses conversational, specific, and concise."
         )
 
     def _build_report_prompt(
@@ -259,6 +267,24 @@ class LLMAgent:
             )
         else:
             hist_block = "\n## User History\nPrior transactions in DB: 0\n"
+
+        # UPI-specific context block
+        upi_block = ""
+        if tx.get("payment_method") == "upi":
+            vpa = tx.get("vpa_handle", "unknown")
+            dev_binding = "FAILED" if tx.get("device_binding_verified", 1) == 0 else "PASSED"
+            vpa_age = "FAILED (<30 days)" if tx.get("vpa_age_verified", 1) == 0 else "PASSED (>30 days)"
+            
+            upi_block = f"""
+## UPI FRAUD INTELLIGENCE CONTEXT
+- Payment Method: UPI
+- VPA Handle: {vpa}
+- Device Binding Verified: {dev_binding}
+- VPA Age > 30 Days: {vpa_age}
+
+CRITICAL: If Device Binding is FAILED, this is a PRIMARY INDICATOR of SIM-swapping or remote-access attack.
+CRITICAL: If VPA Age < 30 days, this is an ELEVATED RISK indicator for social engineering/phishing.
+"""
 
         safe_tx = {k: v for k, v in tx.items() if k not in ("transaction_time",)}
 
@@ -283,13 +309,14 @@ class LLMAgent:
 ## Top Risk Drivers & Security Checks
 {shap_summary_text}
 {hist_block}
+{upi_block}
 
 ## Output Format
 ### Risk Summary
 2–3 plain-English sentences explaining why this transaction was flagged. Focus on the BUSINESS MEANING.
 
 ### Key Risk Indicators
-Bullet list of top signals (Address Verification AVS, CVV Match, Order Amount, Shipping Distance, Account Age).
+Bullet list of top signals (Address Verification AVS, CVV Match, Order Amount, Shipping Distance, Account Age, UPI Device Binding, VPA Age).
 
 ### Behavioral Anomaly Analysis
 Explain in simple terms what anomalous behavior means for this case.
@@ -312,6 +339,27 @@ State: Low / Medium / High confidence."""
             avg = sum(h.get("risk_score", 0) for h in history) / len(history)
             hist_note = f"This user has {len(history)} prior transactions with an average risk score of {avg:.1%}."
 
+        # UPI-specific context for template report
+        upi_note = ""
+        if tx.get("payment_method") == "upi":
+            vpa = tx.get("vpa_handle", "unknown")
+            dev_binding = "FAILED" if tx.get("device_binding_verified", 1) == 0 else "PASSED"
+            vpa_age = "FAILED (<30 days)" if tx.get("vpa_age_verified", 1) == 0 else "PASSED (>30 days)"
+            
+            upi_alerts = []
+            if dev_binding == "FAILED":
+                upi_alerts.append("**CRITICAL: UPI Device Binding FAILED — Strong indicator of SIM-swapping or remote-access screen-sharing attack**")
+            if vpa_age == "FAILED (<30 days)":
+                upi_alerts.append("**ELEVATED: VPA Handle < 30 days old — Common in phishing/social engineering campaigns**")
+            
+            upi_note = f"""
+
+### UPI Fraud Intelligence
+- **VPA Handle:** {vpa}
+- **Device Binding:** {dev_binding}
+- **VPA Age:** {vpa_age}
+{''.join([f'- {alert}\\n' for alert in upi_alerts])}"""
+
         if risk >= 0.75:
             action = "**BLOCK & HOLD FOR MANUAL REVIEW** — Multiple high-confidence fraud indicators were detected."
         elif risk >= 0.30:
@@ -333,6 +381,7 @@ RiskSentinel's Anomaly Detection Engine scored this transaction at **{anomaly:.1
 
 ### Historical Context
 {hist_note}
+{upi_note}
 
 ### Recommended Action
 {action}
@@ -400,9 +449,10 @@ RiskSentinel AI Confidence: **{risk_level}**
         tx: dict,
         shap_data: dict,
         user_history: list | None,
-        razorpay_context: Optional[dict] = None
+        razorpay_context: Optional[dict] = None,
+        network_data: Optional[dict] = None
     ) -> str:
-        """Build a structured context block including live Razorpay Payment Gateway API telemetry."""
+        """Build a structured context block including live Razorpay Payment Gateway API telemetry and Fraud Ring Network Analysis."""
         sanitized_tx = _sanitize_tx_record(tx)
 
         amount = _safe_float(sanitized_tx.get("order_amount", 0.0))
@@ -456,6 +506,47 @@ RiskSentinel AI Confidence: **{risk_level}**
             
             rzp_block = "\n".join(rzp_lines)
 
+        # ── Fraud Ring Network Analysis Block ──
+        network_block = ""
+        if network_data:
+            metadata = network_data.get("metadata", {})
+            clusters = network_data.get("clusters", [])
+            nodes = network_data.get("nodes", [])
+            links = network_data.get("links", [])
+            
+            # Count connections by type
+            total_connections = metadata.get("total_connections", 0)
+            blocked_connections = metadata.get("blocked_connections", 0)
+            velocity_score = metadata.get("velocity_score", 0)
+            is_velocity_attack = metadata.get("is_velocity_attack", False)
+            
+            # Group links by attribute type
+            link_types = defaultdict(int)
+            for link in links:
+                attr = link.get("attribute", "unknown")
+                link_types[attr] += 1
+            
+            network_lines = ["\n## Fraud Ring Network Analysis (Velocity & Ring Detection)"]
+            network_lines.append(f"- **Velocity Window:** {metadata.get('velocity_window_hours', 24)} hours")
+            network_lines.append(f"- **Total Network Connections:** {total_connections}")
+            network_lines.append(f"- **Blocked Transaction Links:** {blocked_connections}")
+            network_lines.append(f"- **Velocity Score:** {velocity_score:.0%} {'(VELOCITY ATTACK DETECTED)' if is_velocity_attack else '(Normal)'}")
+            
+            if link_types:
+                network_lines.append("- **Shared Attribute Breakdown:**")
+                for attr, count in sorted(link_types.items(), key=lambda x: -x[1]):
+                    attr_label = self.FRAUD_ATTRIBUTES.get(attr, attr.replace("_", " ").title())
+                    network_lines.append(f"  - {attr_label}: {count} connections")
+            
+            if clusters:
+                network_lines.append(f"- **Fraud Clusters Detected:** {len(clusters)}")
+                for cluster in clusters:
+                    shared_attrs = ", ".join([a["display"] for a in cluster.get("shared_attributes", [])])
+                    network_lines.append(f"  - Cluster {cluster['id']}: {len(cluster['members'])} transactions sharing [{shared_attrs}] — Severity: {cluster['severity']}")
+                    network_lines.append(f"    *{cluster['description']}*")
+            
+            network_block = "\n".join(network_lines)
+
         total_tx_str = str(prior_count) if prior_count > 0 else _sanitize_llm_value(sanitized_tx.get("total_transactions_user", 0), "total_transactions_user")
 
         raw_features = {
@@ -490,7 +581,7 @@ RiskSentinel AI Confidence: **{risk_level}**
 
 ## Key Risk Drivers & Gateway Security Checks
 {shap_summary}
-{hist_block}{rzp_block}
+{hist_block}{rzp_block}{network_block}
 
 ## Raw Transaction Features
 - Account Age: {raw_features['account_age_days']}
@@ -512,6 +603,7 @@ RiskSentinel AI Confidence: **{risk_level}**
         transaction_context: Optional[dict] = None,
         user_history: Optional[list] = None,
         razorpay_context: Optional[dict] = None,
+        network_data: Optional[dict] = None,
     ) -> str:
         """Conversational Risk Co-Pilot powered by AIML API (anthropic/claude-3-opus-20240229)."""
         shap_data = {}
@@ -524,7 +616,7 @@ RiskSentinel AI Confidence: **{risk_level}**
 
         if self._is_api_available and transaction_context:
             try:
-                context_block = self._build_context_block(transaction_context, shap_data, user_history, razorpay_context)
+                context_block = self._build_context_block(transaction_context, shap_data, user_history, razorpay_context, network_data)
                 system_prompt = self._get_chat_system_prompt()
                 user_prompt = f"""CONTEXT TELEMETRY:
 {context_block}
@@ -561,7 +653,7 @@ USER QUESTION:
 
         # ── Dynamic Fallback if LLM unavailable or fails ──
         try:
-            return self._dynamic_fallback(message, transaction_context, user_history, shap_data, razorpay_context)
+            return self._dynamic_fallback(message, transaction_context, user_history, shap_data, razorpay_context, network_data)
         except Exception as e:
             logger.error("Dynamic fallback error: %s", e, exc_info=True)
             return self._ultimate_fallback(message, transaction_context)
@@ -573,6 +665,7 @@ USER QUESTION:
         user_history: Optional[list],
         shap_data: dict,
         razorpay_context: Optional[dict] = None,
+        network_data: Optional[dict] = None,
     ) -> str:
         """Data-driven fallback when LLM is unavailable."""
         msg = message.lower()
@@ -605,6 +698,27 @@ USER QUESTION:
                     f"status is **{mo.get('status')}** (Amount: ₹{mo.get('amount_inr', 0):,.2f}, Receipt: {mo.get('receipt')})."
                 )
 
+            # Network analysis narrative
+            network_narrative = ""
+            if network_data:
+                metadata = network_data.get("metadata", {})
+                total_connections = metadata.get("total_connections", 0)
+                blocked_connections = metadata.get("blocked_connections", 0)
+                velocity_score = metadata.get("velocity_score", 0)
+                is_velocity_attack = metadata.get("is_velocity_attack", False)
+                clusters = network_data.get("clusters", [])
+
+                if total_connections > 0:
+                    network_narrative = (
+                        f"\n\n**Fraud Ring Network Analysis:** "
+                        f"Found **{total_connections}** linked transactions in the last {metadata.get('velocity_window_hours', 24)}h "
+                        f"({blocked_connections} blocked). Velocity score: {velocity_score:.0%}."
+                    )
+                    if is_velocity_attack:
+                        network_narrative += " **⚠ VELOCITY ATTACK DETECTED** — Multiple transactions from different users sharing attributes."
+                    if clusters:
+                        network_narrative += f" **{len(clusters)} fraud cluster(s) identified** with 3+ shared attributes."
+
             if category == "LOW_RISK":
                 verdict_intro = (
                     f"Transaction **{tx_id}** was **approved** (risk score: **{risk_score * 100:.1f}%**). "
@@ -628,7 +742,7 @@ Here are the key factors evaluated:
 
 {drivers_text}
 
-The **Pattern Recognition Engine** scored this at **{xgb_score * 100:.1f}%**, while the **Anomaly Detection Engine** scored it at **{anomaly_score * 100:.1f}%**.{hist_narrative}{rzp_narrative}"""
+The **Pattern Recognition Engine** scored this at **{xgb_score * 100:.1f}%**, while the **Anomaly Detection Engine** scored it at **{anomaly_score * 100:.1f}%**.{hist_narrative}{rzp_narrative}{network_narrative}"""
 
         # ── General Questions Fallback (No Transaction Context) ──
         if any(k in msg for k in ["hi", "hello", "hey", "greetings"]):

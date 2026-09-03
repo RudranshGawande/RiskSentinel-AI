@@ -24,6 +24,16 @@ class TransactionPayload(BaseModel):
     channel: str = "web"
     merchant_category: str = "electronics"
     transaction_time: Optional[str] = None
+    # Fraud ring detection attributes
+    ip_address: Optional[str] = ""
+    card_bin: Optional[str] = ""
+    device_fingerprint: Optional[str] = ""
+    shipping_address: Optional[str] = ""
+    # UPI-specific attributes
+    payment_method: str = "card"  # "card" or "upi"
+    vpa_handle: Optional[str] = ""
+    device_binding_verified: int = Field(default=1, ge=0, le=1)
+    vpa_age_verified: int = Field(default=1, ge=0, le=1)
 
 class RiskAssessmentResponse(BaseModel):
     """Full risk assessment result returned by POST /api/assess-risk."""
@@ -42,6 +52,7 @@ class RiskAssessmentResponse(BaseModel):
     threat_report: Optional[str] = None
     razorpay_order_id: Optional[str] = None
     execution_time_ms: float
+    risk_network_data: Optional[dict] = None
 
 
 class CopilotRequest(BaseModel):

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2, AlertOctagon, HelpCircle,
-  ArrowUpRight, ArrowDownRight, Zap, ShieldAlert, CreditCard, Lock
+  ArrowUpRight, ArrowDownRight, Zap, ShieldAlert, CreditCard, Lock,
+  Users, Search, AlertTriangle
 } from 'lucide-react';
 import { humanizeFeature, explainImpact } from '../../lib/constants';
 import ThreatReportCard from './ThreatReportCard';
+import FraudRingRadar from '../dashboard/FraudRingRadar';
 
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_TVDhd488H3P2Sb";
 
@@ -37,7 +39,8 @@ export default function RiskResultCard({ result, transactionPayload }) {
     shap_explanations,
     threat_report,
     razorpay_order_id,
-    execution_time_ms
+    execution_time_ms,
+    risk_network_data
   } = result;
 
   const currentRiskLevel = risk_level || risk_category || "LOW_RISK";
@@ -386,6 +389,17 @@ export default function RiskResultCard({ result, transactionPayload }) {
           riskCategory={currentRiskLevel}
           transactionId={result.transaction_id}
         />
+      )}
+
+      {risk_network_data && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-6"
+        >
+          <FraudRingRadar networkData={risk_network_data} />
+        </motion.div>
       )}
     </div>
   );

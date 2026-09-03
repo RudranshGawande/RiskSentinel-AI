@@ -41,7 +41,15 @@ class DatabaseManager:
                     country TEXT DEFAULT 'IN',
                     bin_country TEXT DEFAULT 'IN',
                     channel TEXT DEFAULT 'web',
-                    merchant_category TEXT DEFAULT 'electronics'
+                    merchant_category TEXT DEFAULT 'electronics',
+                    ip_address TEXT DEFAULT '',
+                    card_bin TEXT DEFAULT '',
+                    device_fingerprint TEXT DEFAULT '',
+                    shipping_address TEXT DEFAULT '',
+                    payment_method TEXT DEFAULT 'card',
+                    vpa_handle TEXT DEFAULT '',
+                    device_binding_verified INTEGER DEFAULT 1,
+                    vpa_age_verified INTEGER DEFAULT 1
                 )
             """)
             migration_columns = {
@@ -57,6 +65,14 @@ class DatabaseManager:
                 "bin_country": "TEXT DEFAULT 'IN'",
                 "channel": "TEXT DEFAULT 'web'",
                 "merchant_category": "TEXT DEFAULT 'electronics'",
+                "ip_address": "TEXT DEFAULT ''",
+                "card_bin": "TEXT DEFAULT ''",
+                "device_fingerprint": "TEXT DEFAULT ''",
+                "shipping_address": "TEXT DEFAULT ''",
+                "payment_method": "TEXT DEFAULT 'card'",
+                "vpa_handle": "TEXT DEFAULT ''",
+                "device_binding_verified": "INTEGER DEFAULT 1",
+                "vpa_age_verified": "INTEGER DEFAULT 1",
             }
             cursor = await db.execute("PRAGMA table_info(risk_audit_log)")
             existing_cols = {row[1] for row in await cursor.fetchall()}
@@ -78,6 +94,26 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_user_id
                 ON risk_audit_log(user_id)
             """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ip_address
+                ON risk_audit_log(ip_address)
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_card_bin
+                ON risk_audit_log(card_bin)
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_device_fingerprint
+                ON risk_audit_log(device_fingerprint)
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_shipping_address
+                ON risk_audit_log(shipping_address)
+            """)
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_timestamp
+                ON risk_audit_log(timestamp)
+            """)
             await db.commit()
 
     # ── Write ────────────────────────────────────────────
@@ -92,8 +128,10 @@ class DatabaseManager:
                  shap_top_features, threat_report, execution_time_ms,
                  account_age_days, total_transactions_user, avg_amount_user,
                  shipping_distance_km, promo_used, avs_match, cvv_result,
-                 three_ds_flag, country, bin_country, channel, merchant_category)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 three_ds_flag, country, bin_country, channel, merchant_category,
+                 ip_address, card_bin, device_fingerprint, shipping_address,
+                 payment_method, vpa_handle, device_binding_verified, vpa_age_verified)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 kwargs["transaction_id"],
                 kwargs["user_id"],
@@ -119,6 +157,14 @@ class DatabaseManager:
                 kwargs.get("bin_country", "IN"),
                 kwargs.get("channel", "web"),
                 kwargs.get("merchant_category", "electronics"),
+                kwargs.get("ip_address", ""),
+                kwargs.get("card_bin", ""),
+                kwargs.get("device_fingerprint", ""),
+                kwargs.get("shipping_address", ""),
+                kwargs.get("payment_method", "card"),
+                kwargs.get("vpa_handle", ""),
+                kwargs.get("device_binding_verified", 1),
+                kwargs.get("vpa_age_verified", 1),
             ))
             await db.commit()
 

@@ -15,7 +15,40 @@ const cleanPreset = {
   country: "IN",
   bin_country: "IN",
   channel: "web",
-  merchant_category: "grocery"
+  merchant_category: "grocery",
+  ip_address: "192.168.1.100",
+  card_bin: "411111",
+  device_fingerprint: "dev_fp_abc123",
+  shipping_address: "123 Main St, Mumbai, IN",
+  payment_method: "card",
+  vpa_handle: "",
+  device_binding_verified: 1,
+  vpa_age_verified: 1,
+};
+
+const cleanUpiPreset = {
+  user_id: "usr_upi_clean_01",
+  account_age_days: 730,
+  total_transactions_user: 120,
+  avg_amount_user: 350.0,
+  amount: 250.0,
+  shipping_distance_km: 0.0,
+  promo_used: 0,
+  avs_match: 1,
+  cvv_result: 1,
+  three_ds_flag: 1,
+  country: "IN",
+  bin_country: "IN",
+  channel: "mobile",
+  merchant_category: "grocery",
+  ip_address: "10.0.0.45",
+  card_bin: "",
+  device_fingerprint: "dev_fp_upi_789",
+  shipping_address: "",
+  payment_method: "upi",
+  vpa_handle: "rahul.sharma@okhdfcbank",
+  device_binding_verified: 1,
+  vpa_age_verified: 1,
 };
 
 const suspiciousPreset = {
@@ -32,7 +65,40 @@ const suspiciousPreset = {
   country: "US",
   bin_country: "NG",
   channel: "mobile",
-  merchant_category: "travel"
+  merchant_category: "travel",
+  ip_address: "45.77.123.45",
+  card_bin: "555555",
+  device_fingerprint: "dev_fp_xyz789",
+  shipping_address: "456 Proxy Ave, Moscow, RU",
+  payment_method: "card",
+  vpa_handle: "",
+  device_binding_verified: 0,
+  vpa_age_verified: 0,
+};
+
+const suspiciousUpiPreset = {
+  user_id: "usr_upi_suspect_01",
+  account_age_days: 1,
+  total_transactions_user: 0,
+  avg_amount_user: 0.0,
+  amount: 45000.0,
+  shipping_distance_km: 0.0,
+  promo_used: 0,
+  avs_match: 1,
+  cvv_result: 1,
+  three_ds_flag: 1,
+  country: "IN",
+  bin_country: "IN",
+  channel: "mobile",
+  merchant_category: "electronics",
+  ip_address: "103.45.67.89",
+  card_bin: "",
+  device_fingerprint: "dev_fp_suspicious_001",
+  shipping_address: "",
+  payment_method: "upi",
+  vpa_handle: "fake.user@ybl",
+  device_binding_verified: 0,
+  vpa_age_verified: 0,
 };
 
 function CustomSelect({ label, name, value, options, onChange, tooltip }) {
@@ -111,7 +177,15 @@ export default function TransactionForm({ onSubmit, loading }) {
     country: "IN",
     bin_country: "IN",
     channel: "web",
-    merchant_category: "electronics"
+    merchant_category: "electronics",
+    ip_address: "",
+    card_bin: "",
+    device_fingerprint: "",
+    shipping_address: "",
+    payment_method: "card",
+    vpa_handle: "",
+    device_binding_verified: 1,
+    vpa_age_verified: 1,
   });
 
   const generateTxId = () => {
@@ -285,6 +359,23 @@ export default function TransactionForm({ onSubmit, loading }) {
           <h3 className="text-xs font-bold text-primary uppercase tracking-wider border-l-2 border-primary/60 pl-2 leading-none">
             Transaction Details
           </h3>
+          
+          {/* Payment Method Selector */}
+          <div className="grid grid-cols-2 gap-4">
+            <CustomSelect
+              label="Payment Method"
+              name="payment_method"
+              value={formData.payment_method}
+              onChange={handleSelectChange}
+              options={[
+                { value: "card", label: "Credit / Debit Card" },
+                { value: "upi", label: "UPI" }
+              ]}
+              tooltip="Select payment method to show relevant verification fields."
+            />
+            <div />
+          </div>
+
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5">
@@ -330,7 +421,108 @@ export default function TransactionForm({ onSubmit, loading }) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          {/* Credit Card Fields - Show when payment_method is 'card' */}
+          {formData.payment_method === "card" && (
+            <>
+              <div className="grid grid-cols-3 gap-4 pt-2 border-t border-zinc-800/50">
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Customer billing country (ISO 2-letter)">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleChange}
+                    maxLength={2}
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-center uppercase text-zinc-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Card Issuer Country (ISO 2-letter)">
+                    Card BIN Country
+                  </label>
+                  <input
+                    type="text"
+                    name="bin_country"
+                    value={formData.bin_country}
+                    onChange={handleChange}
+                    maxLength={2}
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-center uppercase text-zinc-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Card BIN (first 6-8 digits)">
+                    Card BIN
+                  </label>
+                  <input
+                    type="text"
+                    name="card_bin"
+                    value={formData.card_bin}
+                    onChange={handleChange}
+                    placeholder="e.g. 411111"
+                    maxLength={8}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground font-mono placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* UPI Fields - Show when payment_method is 'upi' */}
+          {formData.payment_method === "upi" && (
+            <>
+              <div className="grid grid-cols-3 gap-4 pt-2 border-t border-zinc-800/50">
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="UPI Virtual Payment Address (e.g. user@okhdfcbank)">
+                    VPA Handle
+                  </label>
+                  <input
+                    type="text"
+                    name="vpa_handle"
+                    value={formData.vpa_handle}
+                    onChange={handleChange}
+                    placeholder="e.g. rahul.sharma@okhdfcbank"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground font-mono placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="UPI Device Binding Verification Status">
+                    Device Binding Verified
+                  </label>
+                  <CustomSelect
+                    name="device_binding_verified"
+                    value={formData.device_binding_verified}
+                    onChange={handleSelectChange}
+                    options={[
+                      { value: 1, label: "Pass (1)" },
+                      { value: 0, label: "Fail (0)" }
+                    ]}
+                    tooltip="Indicates if UPI device binding (SIM + Device) is verified by NPCI."
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="VPA Age > 30 Days Verification">
+                    {"VPA Age > 30 Days"}
+                  </label>
+                  <CustomSelect
+                    name="vpa_age_verified"
+                    value={formData.vpa_age_verified}
+                    onChange={handleSelectChange}
+                    options={[
+                      { value: 1, label: "Pass (1)" },
+                      { value: 0, label: "Fail (0)" }
+                    ]}
+                    tooltip="Indicates if the VPA handle is older than 30 days (reduces fraud risk)."
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="grid grid-cols-3 gap-4 pt-2 border-t border-zinc-800/50">
             <CustomSelect
               label="Channel"
               name="channel"
@@ -357,37 +549,6 @@ export default function TransactionForm({ onSubmit, loading }) {
               ]}
               tooltip="The product category segment."
             />
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Customer billing country (ISO 2-letter)">
-                  Country
-                </label>
-                <input
-                  type="text"
-                  name="country"
-                  value={formData.country}
-                  onChange={handleChange}
-                  maxLength={2}
-                  required
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-center uppercase text-zinc-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all font-semibold"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Card Issuer Country (ISO 2-letter)">
-                  Card BIN
-                </label>
-                <input
-                  type="text"
-                  name="bin_country"
-                  value={formData.bin_country}
-                  onChange={handleChange}
-                  maxLength={2}
-                  required
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-center uppercase text-zinc-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all font-semibold"
-                />
-              </div>
-            </div>
           </div>
         </div>
 
@@ -395,42 +556,138 @@ export default function TransactionForm({ onSubmit, loading }) {
           <h3 className="text-xs font-bold text-primary uppercase tracking-wider border-l-2 border-primary/60 pl-2 leading-none">
             Gateway Verification Checklist
           </h3>
-          <div className="grid grid-cols-3 gap-4">
-            <CustomSelect
-              label="AVS Match"
-              name="avs_match"
-              value={formData.avs_match}
-              onChange={handleSelectChange}
-              options={[
-                { value: 0, label: "Fail (0)" },
-                { value: 1, label: "Pass (1)" }
-              ]}
-              tooltip="Address Verification System check results."
-            />
+          
+          {/* Card Payment Security Checks */}
+          {formData.payment_method === "card" && (
+            <div className="grid grid-cols-3 gap-4">
+              <CustomSelect
+                label="AVS Match"
+                name="avs_match"
+                value={formData.avs_match}
+                onChange={handleSelectChange}
+                options={[
+                  { value: 0, label: "Fail (0)" },
+                  { value: 1, label: "Pass (1)" }
+                ]}
+                tooltip="Address Verification System check results."
+              />
 
-            <CustomSelect
-              label="CVV Result"
-              name="cvv_result"
-              value={formData.cvv_result}
-              onChange={handleSelectChange}
-              options={[
-                { value: 0, label: "Fail (0)" },
-                { value: 1, label: "Pass (1)" }
-              ]}
-              tooltip="Card Security Code check verification."
-            />
+              <CustomSelect
+                label="CVV Result"
+                name="cvv_result"
+                value={formData.cvv_result}
+                onChange={handleSelectChange}
+                options={[
+                  { value: 0, label: "Fail (0)" },
+                  { value: 1, label: "Pass (1)" }
+                ]}
+                tooltip="Card Security Code check verification."
+              />
 
-            <CustomSelect
-              label="3-D Secure"
-              name="three_ds_flag"
-              value={formData.three_ds_flag}
-              onChange={handleSelectChange}
-              options={[
-                { value: 0, label: "Fail / Bypass (0)" },
-                { value: 1, label: "Pass (1)" }
-              ]}
-              tooltip="3-D Secure Multi-factor Authentication status."
-            />
+              <CustomSelect
+                label="3-D Secure"
+                name="three_ds_flag"
+                value={formData.three_ds_flag}
+                onChange={handleSelectChange}
+                options={[
+                  { value: 0, label: "Fail / Bypass (0)" },
+                  { value: 1, label: "Pass (1)" }
+                ]}
+                tooltip="3-D Secure Multi-factor Authentication status."
+              />
+            </div>
+          )}
+
+          {/* UPI Payment Security Checks */}
+          {formData.payment_method === "upi" && (
+            <div className="grid grid-cols-3 gap-4">
+              <CustomSelect
+                label="Device Binding Verified"
+                name="device_binding_verified"
+                value={formData.device_binding_verified}
+                onChange={handleSelectChange}
+                options={[
+                  { value: 1, label: "Pass (1)" },
+                  { value: 0, label: "Fail (0)" }
+                ]}
+                tooltip="NPCI UPI device binding verification (SIM + Device cryptographic binding)."
+              />
+
+              <CustomSelect
+                label={"VPA Age > 30 Days"}
+                name="vpa_age_verified"
+                value={formData.vpa_age_verified}
+                onChange={handleSelectChange}
+                options={[
+                  { value: 1, label: "Pass (1)" },
+                  { value: 0, label: "Fail (0)" }
+                ]}
+                tooltip="VPA handle age verification (>30 days reduces fraud risk)."
+              />
+
+              <div />
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3.5 pt-4 border-t border-zinc-800/50">
+          <h3 className="text-xs font-bold text-primary uppercase tracking-wider border-l-2 border-primary/60 pl-2 leading-none">
+            Fraud Ring Detection Attributes
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Client IP Address for velocity analysis">
+                IP Address
+              </label>
+              <input
+                type="text"
+                name="ip_address"
+                value={formData.ip_address}
+                onChange={handleChange}
+                placeholder="e.g. 192.168.1.1"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground font-mono placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Card BIN (first 6-8 digits)">
+                Card BIN
+              </label>
+              <input
+                type="text"
+                name="card_bin"
+                value={formData.card_bin}
+                onChange={handleChange}
+                placeholder="e.g. 411111"
+                maxLength={8}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground font-mono placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Device Fingerprint Hash">
+                Device Fingerprint
+              </label>
+              <input
+                type="text"
+                name="device_fingerprint"
+                value={formData.device_fingerprint}
+                onChange={handleChange}
+                placeholder="e.g. dev_fp_abc123"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground font-mono placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-zinc-400 font-semibold block mb-1.5" title="Shipping Address for ring detection">
+                Shipping Address
+              </label>
+              <input
+                type="text"
+                name="shipping_address"
+                value={formData.shipping_address}
+                onChange={handleChange}
+                placeholder="e.g. 123 Main St, City, Country"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 hover:border-zinc-700/80 transition-all"
+              />
+            </div>
           </div>
         </div>
 

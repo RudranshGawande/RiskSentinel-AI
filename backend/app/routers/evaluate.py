@@ -1,6 +1,6 @@
 """
 RiskSentinel AI v2.0 -- Risk Evaluation & Adaptive 3DS Router
-=============================================================
+===========================================================
 POST /api/assess-risk  and  POST /api/evaluate
 
 Generates Razorpay order IDs for both LOW_RISK and MEDIUM_RISK transactions.
@@ -8,12 +8,52 @@ Returns adaptive 3-tier recommendation and `requires_step_up_3ds` flag.
 """
 import time
 import json
+from datetime import datetime
 from fastapi import APIRouter, Request
 
 from ..models.schemas import TransactionPayload, RiskAssessmentResponse
 from ..services.risk_engine import classify_risk
+from ..services.fraud_graph import FraudGraphService
 
 router = APIRouter(prefix="/api", tags=["Risk Assessment & Evaluation"])
+
+
+def compute_upi_risk_boost(payload_dict: dict, base_risk_score: float) -> tuple[float, list[str]]:
+    """
+    Compute UPI-specific risk boost and reasons.
+    
+    Returns:
+        tuple: (risk_boost, list_of_reasons)
+    """
+    payment_method = payload_dict.get("payment_method", "card")
+    if payment_method != "upi":
+        return 0.0, []
+    
+    boost = 0.0
+    reasons = []
+    
+    # Critical: Device Binding Failed
+    device_binding = payload_dict.get("device_binding_verified", 1)
+    if device_binding == 0:
+        boost += 0.35
+        reasons.append("UPI Device Binding Verification FAILED")
+    
+    # High: VPA Age < 30 days
+    vpa_age = payload_dict.get("vpa_age_verified", 1)
+    if vpa_age == 0:
+        boost += 0.20
+        reasons.append("VPA Handle Age < 30 Days")
+    
+    # Medium: High amount on UPI with failed checks
+    amount = payload_dict.get("amount", 0)
+    if amount > 25000 and (device_binding == 0 or vpa_age == 0):
+        boost += 0.15
+        reasons.append("High Amount UPI Transaction with Failed Security Checks")
+    
+    # Cap the boost
+    boost = min(boost, 0.50)
+    
+    return boost, reasons
 
 
 async def evaluate_transaction_logic(payload: TransactionPayload, request: Request) -> dict:
@@ -26,6 +66,9 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
     llm = request.app.state.llm_agent
     cfg = request.app.state.settings
 
+    # Initialize fraud graph service
+    fraud_graph = FraudGraphService(db, velocity_window_hours=24)
+
     payload_dict = payload.model_dump()
 
     # 1. Cache Check
@@ -35,7 +78,7 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
         result = {**cached}
         result["transaction_id"] = payload.transaction_id
         result["execution_time_ms"] = round((time.time() - start_time) * 1000, 2)
-        
+
         await db.log_assessment(
             transaction_id=payload.transaction_id,
             user_id=payload.user_id,
@@ -61,6 +104,14 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
             bin_country=payload_dict.get("bin_country", "IN"),
             channel=payload_dict.get("channel", "web"),
             merchant_category=payload_dict.get("merchant_category", "electronics"),
+            ip_address=payload_dict.get("ip_address", ""),
+            card_bin=payload_dict.get("card_bin", ""),
+            device_fingerprint=payload_dict.get("device_fingerprint", ""),
+            shipping_address=payload_dict.get("shipping_address", ""),
+            payment_method=payload_dict.get("payment_method", "card"),
+            vpa_handle=payload_dict.get("vpa_handle", ""),
+            device_binding_verified=payload_dict.get("device_binding_verified", 1),
+            vpa_age_verified=payload_dict.get("vpa_age_verified", 1),
         )
         return result
 
@@ -72,7 +123,12 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
     )
     risk_score = ml_result["combined_risk_score"]
 
-    # 3. Adaptive 3-Tier Risk Gating
+    # 3. UPI-Specific Risk Boost
+    upi_boost, upi_reasons = compute_upi_risk_boost(payload_dict, risk_score)
+    if upi_boost > 0:
+        risk_score = min(1.0, risk_score + upi_boost)
+
+    # 4. Adaptive 3-Tier Risk Gating
     classification = classify_risk(
         risk_score=risk_score,
         low_ceiling=cfg.LOW_RISK_CEILING,
@@ -84,8 +140,12 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
     action = classification["action_taken"]
     requires_step_up_3ds = classification["requires_step_up_3ds"]
     explanation = classification["explanation"]
+    
+    # Append UPI-specific reasons to explanation
+    if upi_reasons:
+        explanation += f" UPI Alerts: {'; '.join(upi_reasons)}."
 
-    # 4. Threat Intelligence Report (Generated for all risk tiers: Low, Medium, High)
+    # 5. Threat Intelligence Report (Generated for all risk tiers: Low, Medium, High)
     threat_report = None
     try:
         user_history = await db.get_user_history(payload.user_id)
@@ -106,7 +166,27 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
             user_history if 'user_history' in locals() else None,
         )
 
-    # 5. Razorpay Order Generation (for BOTH LOW_RISK and MEDIUM_RISK)
+    # 5. Fraud Ring Network Graph Analysis
+    risk_network_data = None
+    try:
+        # Build network graph using current transaction + historical data
+        # Merge payload with ML results for the current transaction context
+        current_tx_context = {
+            **payload_dict,
+            "transaction_id": payload.transaction_id,
+            "risk_score": risk_score,
+            "risk_category": category,
+            "action_taken": action,
+            "order_amount": payload.amount,
+            "timestamp": datetime.now().isoformat(),
+        }
+        risk_network_data = await fraud_graph.build_network_graph(current_tx_context)
+    except Exception as e:
+        # Graceful degradation - don't fail the whole request if graph analysis fails
+        print(f"[FraudGraph] Network analysis failed: {e}")
+        risk_network_data = {"nodes": [], "links": [], "clusters": [], "metadata": {"error": str(e)}}
+
+    # 6. Razorpay Order Generation (for BOTH LOW_RISK and MEDIUM_RISK)
     razorpay_order_id = None
     if risk_level in ("LOW_RISK", "MEDIUM_RISK") and cfg.RAZORPAY_KEY_ID and cfg.RAZORPAY_KEY_SECRET:
         try:
@@ -138,7 +218,7 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
 
     execution_time_ms = round((time.time() - start_time) * 1000, 2)
 
-    # 6. Audit Trail Logging
+    # 7. Audit Trail Logging
     await db.log_assessment(
         transaction_id=payload.transaction_id,
         user_id=payload.user_id,
@@ -164,9 +244,17 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
         bin_country=payload_dict.get("bin_country", "IN"),
         channel=payload_dict.get("channel", "web"),
         merchant_category=payload_dict.get("merchant_category", "electronics"),
+        ip_address=payload_dict.get("ip_address", ""),
+        card_bin=payload_dict.get("card_bin", ""),
+        device_fingerprint=payload_dict.get("device_fingerprint", ""),
+        shipping_address=payload_dict.get("shipping_address", ""),
+        payment_method=payload_dict.get("payment_method", "card"),
+        vpa_handle=payload_dict.get("vpa_handle", ""),
+        device_binding_verified=payload_dict.get("device_binding_verified", 1),
+        vpa_age_verified=payload_dict.get("vpa_age_verified", 1),
     )
 
-    # 7. Build Response
+    # 8. Build Response
     result = {
         "status": "SUCCESS",
         "transaction_id": payload.transaction_id,
@@ -183,9 +271,10 @@ async def evaluate_transaction_logic(payload: TransactionPayload, request: Reque
         "threat_report": threat_report,
         "razorpay_order_id": razorpay_order_id,
         "execution_time_ms": execution_time_ms,
+        "risk_network_data": risk_network_data,
     }
 
-    # 8. Cache result
+    # 9. Cache result
     cache.set(cache_key, result)
 
     return result
