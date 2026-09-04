@@ -26,45 +26,45 @@ RiskSentinel AI is a production-grade risk management platform that combines sup
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           FRONTEND (React + Vite)                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐    │
-│  │ Command     │  │ Transaction │  │ Risk Co-Pilot│  │ Design System   │    │
-│  │ Center      │  │ Evaluator   │  │ (Chat)      │  │ (Tailwind)      │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────────┘    │
-└─────────┼────────────────┼────────────────┼────────────────────────────────┘
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐     │
+│  │ Command     │  │ Transaction │  │ Risk Co-Pilot│  │ Design System  │     │
+│  │ Center      │  │ Evaluator   │  │ (Chat)      │  │ (Tailwind)      │     │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────────┘     │
+└─────────┼────────────────┼────────────────┼─────────────────────────────── ─┘
           │                │                │
           ▼                ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        BACKEND (Async FastAPI)                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐    │
-│  │ /api/       │  │ /api/audit  │  │ /api/       │  │ /api/copilot/   │    │
-│  │ assess-risk │  │ (paginated) │  │ analytics   │  │ chat            │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘    │
-└─────────┼────────────────┼────────────────┼──────────────────┼─────────────┘
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐     │
+│  │ /api/       │  │ /api/audit  │  │ /api/       │  │ /api/copilot/   │     │
+│  │ assess-risk │  │ (paginated) │  │ analytics   │  │ chat            │     │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘     │
+└─────────┼────────────────┼────────────────┼──────────────────┼──────────── ─┘
           │                │                │                  │
           ▼                ▼                ▼                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         SERVICES LAYER                                      │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐   │
-│  │ ML Engine    │ │ LLM Agent    │ │ TTL Cache    │ │ Async SQLite     │   │
-│  │ (XGBoost +   │ │ (Threat      │ │ (cachetools) │ │ (aiosqlite)      │   │
-│  │  Isolation    │ │  Intel +     │ │ 5-min TTL,   │ │ Audit Trail +    │   │
-│  │  Forest)     │ │  Chat)       │ │ 10K entries  │ │ Analytics        │   │
-│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘   │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐    │
+│  │ ML Engine    │ │ LLM Agent    │ │ TTL Cache    │ │ Async SQLite     │    │
+│  │ (XGBoost +   │ │ (Threat      │ │ (cachetools) │ │ (aiosqlite)      │    │
+│  │  Isolation    │ │  Intel +     │ │ 5-min TTL,   │ │ Audit Trail +   │    │
+│  │  Forest)     │ │  Chat)       │ │ 10K entries  │ │ Analytics        │    │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
           │                ▲                ▲                  ▲
           ▼                │                │                  │
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         ML PIPELINE (Offline)                               │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────────┐  │
-│  │ preprocess  │→ │ train_       │→ │ train_       │→ │ evaluate       │  │
-│  │ .py         │  │ xgboost.py   │  │ anomaly.py   │  │ .py            │  │
-│  └─────────────┘  └──────────────┘  └──────────────┘  └────────────────┘  │
-│         │                │                │                │               │
-│         ▼                ▼                ▼                ▼               │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │ ARTIFACTS: xgboost_model.pkl, isolation_forest.pkl, preprocessor.pkl,│  │
-│  │           shap_explainer.pkl, feature_names.json                    │  │
-│  └─────────────────────────────────────────────────────────────────────┘  │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────────────┐    │
+│  │ preprocess  │→ │ train_       │→ │ train_       │→ │ evaluate       │    │
+│  │ .py         │  │ xgboost.py   │  │ anomaly.py   │  │ .py            │    │
+│  └─────────────┘  └──────────────┘  └──────────────┘  └────────────────┘    │
+│         │                │                │                │                │
+│         ▼                ▼                ▼                ▼                │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ ARTIFACTS: xgboost_model.pkl, isolation_forest.pkl, preprocessor.pkl,│   │
+│  │           shap_explainer.pkl, feature_names.json                    │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,89 +73,88 @@ RiskSentinel AI is a production-grade risk management platform that combines sup
 ## Project Structure
 
 ```
-razorpay-risk-sentinel/
+📂 razorpay-risk-sentinel/
+├── ⚙️ backend/
+│   ├── 🚀 app/
+│   │   ├── 🐍 __init__.py
+│   │   ├── ⚡ main.py                     # FastAPI app factory, CORS, lifespan
+│   │   ├── ⚙️ config.py                   # Pydantic Settings (env vars, paths, thresholds)
+│   │   │
+│   │   ├── 🛣️ routers/
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🎯 risk.py                 # POST /api/assess-risk (core endpoint)
+│   │   │   ├── 📜 audit.py                # GET /api/audit (paginated log viewer)
+│   │   │   ├── 📊 analytics.py            # GET /api/analytics/* (dashboard data)
+│   │   │   └── 🤖 copilot.py              # POST /api/copilot/chat (LLM chat)
+│   │   │
+│   │   ├── 🛠️ services/
+│   │   │   ├── 🐍 __init__.py
+│   │   │   ├── 🧠 ml_engine.py            # XGBoost + IsolationForest dual-scoring + SHAP
+│   │   │   ├── 🕵️ llm_agent.py            # Agentic LLM threat investigator
+│   │   │   ├── ⚡ cache.py                # TTL in-memory cache (cachetools)
+│   │   │   ├── 🗄️ database.py             # Async SQLite (aiosqlite) manager
+│   │   │   └── 💳 razorpay_service.py     # Razorpay Payment Gateway integration
+│   │   │
+│   │   └── 📦 models/
+│   │       ├── 🐍 __init__.py
+│   │       └── 📝 schemas.py              # All Pydantic request/response models
+│   │
+│   ├── 🧠 ml/
+│   │   ├── ⚙️ preprocess.py               # Enhanced preprocessing + saves preprocessor.pkl
+│   │   ├── 📈 train_xgboost.py            # XGBoost training with class weighting
+│   │   ├── 🌲 train_anomaly.py            # Isolation Forest on normal transactions
+│   │   └── 📊 evaluate.py                 # Unified eval: metrics, financial impact, SHAP
+│   │
+│   ├── 💾 artifacts/                      # All saved model files (gitignored)
+│   │   ├── 🤖 xgboost_model.pkl
+│   │   ├── 🌲 isolation_forest.pkl
+│   │   ├── ⚙️ preprocessor.pkl
+│   │   ├── 💡 shap_explainer.pkl
+│   │   └── 📋 feature_names.json
+│   │
+│   ├── 🗄️ audit_trail.db                  # SQLite audit database (gitignored)
+│   ├── 📦 requirements.txt                # Python dependencies
+│   └── 🚀 run.py                          # Uvicorn launcher script
 │
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py                    # FastAPI app factory, CORS, lifespan
-│   │   ├── config.py                  # Pydantic Settings (env vars, paths, thresholds)
-│   │   │
-│   │   ├── routers/
-│   │   │   ├── __init__.py
-│   │   │   ├── risk.py                # POST /api/assess-risk (core endpoint)
-│   │   │   ├── audit.py               # GET /api/audit (paginated log viewer)
-│   │   │   ├── analytics.py           # GET /api/analytics/* (dashboard data)
-│   │   │   └── copilot.py             # POST /api/copilot/chat (LLM chat)
-│   │   │
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── ml_engine.py           # XGBoost + IsolationForest dual-scoring + SHAP
-│   │   │   ├── llm_agent.py           # Agentic LLM threat investigator
-│   │   │   ├── cache.py               # TTL in-memory cache (cachetools)
-│   │   │   ├── database.py            # Async SQLite (aiosqlite) manager
-│   │   │   └── razorpay_service.py    # Razorpay Payment Gateway integration
-│   │   │
-│   │   └── models/
-│   │       ├── __init__.py
-│   │       └── schemas.py             # All Pydantic request/response models
+├── 💻 frontend/
+│   ├── 📦 package.json
+│   ├── ⚡ vite.config.js
+│   ├── 🎨 tailwind.config.js
+│   ├── ⚙️ postcss.config.js
+│   ├── 🌐 index.html
 │   │
-│   ├── ml/
-│   │   ├── preprocess.py              # Enhanced preprocessing + saves preprocessor.pkl
-│   │   ├── train_xgboost.py           # XGBoost training with class weighting
-│   │   ├── train_anomaly.py           # Isolation Forest on normal transactions
-│   │   └── evaluate.py                # Unified eval: metrics, financial impact, SHAP
-│   │
-│   ├── artifacts/                     # All saved model files (gitignored)
-│   │   ├── xgboost_model.pkl
-│   │   ├── isolation_forest.pkl
-│   │   ├── preprocessor.pkl
-│   │   ├── shap_explainer.pkl
-│   │   └── feature_names.json
-│   │
-│   ├── audit_trail.db                 # SQLite audit database (gitignored)
-│   ├── requirements.txt               # Python dependencies
-│   └── run.py                         # Uvicorn launcher script
-│
-├── frontend/
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   ├── index.html
-│   │
-│   └── src/
-│       ├── main.jsx                   # React entry point
-│       ├── App.jsx                    # Root component + routing
-│       ├── index.css                  # Tailwind + custom design tokens
+│   └── 🧬 src/
+│       ├── 🎯 main.jsx                    # React entry point
+│       ├── ⚛️ App.jsx                     # Root component + routing
+│       ├── 🎨 index.css                   # Tailwind + custom design tokens
 │       │
-│       ├── components/
-│       │   ├── layout/
-│       │   │   └── Sidebar.jsx        # Navigation sidebar with status
+│       ├── 🧩 components/
+│       │   ├── 📐 layout/
+│       │   │   └── 🗂️ Sidebar.jsx         # Navigation sidebar with status
 │       │   │
-│       │   ├── transaction/
-│       │   │   ├── TransactionForm.jsx    # Transaction submission form
-│       │   │   ├── RiskResultCard.jsx     # Risk assessment result display
-│       │   │   └── ThreatReportCard.jsx   # Rendered threat intel report
+│       │   ├── 💳 transaction/
+│       │   │   ├── 📝 TransactionForm.jsx # Transaction submission form
+│       │   │   ├── 🏷️ RiskResultCard.jsx  # Risk assessment result display
+│       │   │   └── 🛡️ ThreatReportCard.jsx# Rendered threat intel report
 │       │   │
-│       │   └── copilot/
-│       │       └── TxContextInput.jsx     # Transaction ID search input
+│       │   └── 🤖 copilot/
+│       │       └── 🔍 TxContextInput.jsx  # Transaction ID search input
 │       │
-│       ├── pages/
-│       │   ├── CommandCenter.jsx      # Main dashboard (KPIs, charts, live feed)
-│       │   ├── TransactionEval.jsx    # Single transaction evaluator
-│       │   └── CoPilot.jsx            # Risk Co-Pilot chat page
+│       ├── 🖥️ pages/
+│       │   ├── 📊 CommandCenter.jsx       # Main dashboard (KPIs, charts, live feed)
+│       │   ├── 🎯 TransactionEval.jsx     # Single transaction evaluator
+│       │   └── 🤖 CoPilot.jsx             # Risk Co-Pilot chat page
 │       │
-│       ├── context/
-│       │   └── CopilotContext.jsx     # Chat state + API integration
+│       ├── 🔄 context/
+│       │   └── 🧠 CopilotContext.jsx      # Chat state + API integration
 │       │
-│       └── lib/
-│           ├── api.js                 # API client (fetch wrapper)
-│           └── constants.js           # Colors, thresholds, helpers
+│       └── 🧰 lib/
+│           ├── 🌐 api.js                  # API client (fetch wrapper)
+│           └── 🎨 constants.js            # Colors, thresholds, helpers
 │
-├── .gitignore
-├── transactions.csv                   # Sample training data
-└── README.md                          # This file
+├── 📄 .gitignore
+├── 📊 transactions.csv                    # Sample training data
+└── 📝 README.md                           # Project documentation
 ```
 
 ---
@@ -344,7 +343,7 @@ VITE_API_URL=http://localhost:8000
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/copilot/chat` | Conversational risk analysis |
+| `POST` | `/api/copilot/chat`    | Conversational risk analysis |
 
 **Request:**
 ```json
@@ -504,50 +503,6 @@ npm run lint
 - **Python**: Black formatting, type hints throughout
 - **JavaScript/React**: ESLint + Prettier (via oxlint)
 - **Git**: Conventional commits recommended
-
----
-
-## Deployment Notes
-
-### Production Checklist
-- [ ] Rotate all secrets (`.env` files were in git history briefly)
-- [ ] Set `AIML_API_KEY` and `RAZORPAY_KEY_*` in production environment
-- [ ] Use PostgreSQL instead of SQLite for audit trail
-- [ ] Add Redis for distributed caching
-- [ ] Enable HTTPS / TLS termination
-- [ ] Configure rate limiting on `/api/assess-risk`
-- [ ] Set up monitoring (Prometheus/Grafana)
-- [ ] Run models on GPU if available (XGBoost supports `gpu_hist`)
-
-### Docker (Example)
-
-```dockerfile
-# Backend
-FROM python:3.11-slim
-WORKDIR /app
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY backend/ ./backend
-COPY backend/artifacts/ ./artifacts
-EXPOSE 8000
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
----
-
-## Security
-
-- **No secrets in repo**: `.env` files gitignored
-- **Input validation**: Pydantic v2 schemas with graceful defaults
-- **Error handling**: Structured JSON errors, no stack traces leaked
-- **CORS**: Configured for known frontend origins
-- **SQL injection**: Parameterized queries via aiosqlite
-
----
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
