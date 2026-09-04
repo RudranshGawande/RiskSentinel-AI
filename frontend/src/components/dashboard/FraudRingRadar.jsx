@@ -1,528 +1,377 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertTriangle, ShieldCheck, Lock, Search, Info,
-  Link2, Zap, Users, Eye, EyeOff, Maximize2
+  Radio, Network, Users, AlertTriangle, ShieldCheck,
+  Globe, CreditCard, Smartphone, MapPin, CheckCircle2,
+  Activity, Share2, Layers, ShieldAlert, Zap, Info, Eye
 } from 'lucide-react';
-import ForceGraph2D from 'react-force-graph-2d';
 
-const GROUP_COLORS = {
-  central: { node: '#6366f1', border: '#818cf8', glow: 'rgba(99, 102, 241, 0.6)', label: 'Current Transaction' },
-  blocked: { node: '#f43f5e', border: '#fb7185', glow: 'rgba(244, 63, 94, 0.5)', label: 'Blocked' },
-  step_up: { node: '#f59e0b', border: '#fbbf24', glow: 'rgba(245, 158, 11, 0.5)', label: 'Step-Up Auth' },
-  approved: { node: '#10b981', border: '#34d399', glow: 'rgba(16, 185, 129, 0.5)', label: 'Approved' },
-};
+export default function FraudRingRadar({ networkData }) {
+  const nodes = networkData?.nodes || [];
+  const links = networkData?.links || [];
+  const clusters = networkData?.clusters || [];
 
-const ATTRIBUTE_COLORS = {
-  ip_address: '#6366f1',
-  card_bin: '#10b981',
-  device_fingerprint: '#f59e0b',
-  shipping_address: '#ec4899',
-};
+  // Default to current transaction or first node
+  const [selectedNodeId, setSelectedNodeId] = useState(
+    nodes.find((n) => n.is_current)?.id || nodes[0]?.id || 'current_tx'
+  );
+  const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'TRANSACTION' | 'IDENTITY'
 
-const ATTRIBUTE_LABELS = {
-  ip_address: 'IP Address',
-  card_bin: 'Card BIN',
-  device_fingerprint: 'Device Fingerprint',
-  shipping_address: 'Shipping Address',
-};
+  // If selectedNodeId not found, fallback
+  const selectedNode = useMemo(() => {
+    return nodes.find((n) => n.id === selectedNodeId) || nodes[0] || null;
+  }, [nodes, selectedNodeId]);
 
-const ATTRIBUTE_ICONS = {
-  ip_address: '🌐',
-  card_bin: '💳',
-  device_fingerprint: '📱',
-  shipping_address: '📦',
-};
+  const stats = useMemo(() => {
+    const total = nodes.length;
+    const blocked = nodes.filter(
+      (n) => n.risk_category === 'HIGH_RISK' || n.risk_score >= 0.75 || n.action === 'BLOCK'
+    ).length;
+    const medium = nodes.filter(
+      (n) => (n.risk_category === 'MEDIUM_RISK' || n.risk_score >= 0.3) && n.risk_score < 0.75
+    ).length;
+    const clean = total - blocked - medium;
+    return { total: total || 1, blocked, medium, clean };
+  }, [nodes]);
 
-export default function FraudRingRadar({ networkData, isExpanded = false, onToggleExpand }) {
-  const graphRef = useRef(null);
-  const [highlightedNode, setHighlightedNode] = useState(null);
-  const [selectedAttribute, setSelectedAttribute] = useState(null);
-  const [showLegend, setShowLegend] = useState(true);
+  // Node position mapper in a 300x300 radar coordinate system
+  const nodePositions = useMemo(() => {
+    const positions = {};
+    const center = { x: 150, y: 150 };
 
-  if (!networkData || (!networkData.nodes?.length && !networkData.links?.length)) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="bg-card border border-border/60 rounded-2xl p-8 text-center"
-      >
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-secondary/50 flex items-center justify-center">
-          <Search className="w-7 h-7 opacity-30" />
-        </div>
-        <h3 className="font-semibold text-foreground/60 mb-1">No Network Connections Detected</h3>
-        <p className="text-xs text-muted-foreground max-w-[280px] mx-auto leading-relaxed">
-          This transaction has no shared fraud attributes (IP, Card BIN, Device, Shipping) with historical transactions in the velocity window.
-        </p>
-        {networkData?.metadata && (
-          <div className="mt-4 p-3 bg-secondary/30 border border-border/40 rounded-lg text-left text-[10px] text-muted-foreground">
-            <div className="font-medium text-foreground/75 mb-1">Velocity Window: {networkData.metadata.velocity_window_hours || 24}h</div>
-            <div>Total connections checked: {networkData.metadata.total_connections || 0}</div>
-          </div>
-        )}
-      </motion.div>
-    );
-  }
-
-  const { nodes, links, clusters, metadata } = networkData;
-
-  const centralNode = useMemo(() => nodes.find(n => n.group === 'central'), [nodes]);
-  const historicalNodes = useMemo(() => nodes.filter(n => n.group !== 'central'), [nodes]);
-  const blockedCount = historicalNodes.filter(n => n.group === 'blocked').length;
-  const stepUpCount = historicalNodes.filter(n => n.group === 'step_up').length;
-  const approvedCount = historicalNodes.filter(n => n.group === 'approved').length;
-
-  const attributeFilter = useMemo(() => {
-    if (!selectedAttribute) return null;
-    const attrNodes = new Set();
-    links.forEach(link => {
-      if (link.attribute === selectedAttribute) {
-        attrNodes.add(link.source);
-        attrNodes.add(link.target);
-      }
-    });
-    return attrNodes;
-  }, [links, selectedAttribute]);
-
-  const processedNodes = useMemo(() => {
-    return nodes.map(node => {
-      const groupConfig = GROUP_COLORS[node.group] || GROUP_COLORS.approved;
-      const isCentral = node.group === 'central';
-      const isFiltered = attributeFilter && !attributeFilter.has(node.id);
-      const isHighlighted = highlightedNode === node.id;
-
-      return {
-        ...node,
-        color: isFiltered ? '#3f3f46' : (isHighlighted ? groupConfig.border : groupConfig.node),
-        borderColor: isFiltered ? '#27272a' : groupConfig.border,
-        size: isCentral ? (isExpanded ? 30 : 25) : (isExpanded ? 16 : 12),
-        opacity: isFiltered ? 0.3 : 1,
-        glow: isCentral && !isFiltered ? groupConfig.glow : 'transparent',
-        fontSize: isCentral ? (isExpanded ? 11 : 9) : (isExpanded ? 9 : 8),
-        label: isCentral ? 'CURRENT' : node.id.slice(0, 12) + (node.id.length > 12 ? '...' : ''),
-        fullLabel: node.id,
-        riskScore: node.risk_score,
-        riskCategory: node.risk_category,
-        actionTaken: node.action_taken,
-        amount: node.amount,
-        timestamp: node.timestamp,
-        sharedAttributes: node.shared_attributes || [],
-      };
-    });
-  }, [nodes, highlightedNode, attributeFilter, isExpanded]);
-
-  const processedLinks = useMemo(() => {
-    return links.map(link => {
-      const isFiltered = selectedAttribute && link.attribute !== selectedAttribute;
-      const attrColor = ATTRIBUTE_COLORS[link.attribute] || '#71717a';
-
-      return {
-        ...link,
-        source: link.source,
-        target: link.target,
-        color: isFiltered ? '#27272a' : attrColor,
-        width: isFiltered ? 0.5 : (isExpanded ? link.width * 1.5 : link.width),
-        opacity: isFiltered ? 0.15 : 0.8,
-        dash: isFiltered ? [5, 5] : undefined,
-        label: link.label,
-        attribute: link.attribute,
-        value: link.value,
-        correlationStrength: link.correlation_strength,
-      };
-    });
-  }, [links, selectedAttribute, isExpanded]);
-
-  useEffect(() => {
-    if (graphRef.current) {
-      graphRef.current
-        .nodeAutoColorBy('group')
-        .linkDirectionalParticles(links.length > 0 ? 2 : 0)
-        .linkDirectionalParticleSpeed(0.005)
-        .linkDirectionalParticleWidth(1.5)
-        .linkDirectionalParticleColor(link => {
-          const attrColor = ATTRIBUTE_COLORS[link.attribute] || '#71717a';
-          return attrColor;
-        })
-        .onNodeHover(node => {
-          setHighlightedNode(node?.id || null);
-          graphRef.current?.nodeThreeObjectExtend(true);
-        })
-        .onLinkHover(link => {
-          setHighlightedNode(link ? [link.source, link.target] : null);
-        })
-        .backgroundColor('#13151B')
-        .zoomToFit(300, 50, 20);
+    // Find current node
+    const currentNode = nodes.find((n) => n.is_current) || nodes[0];
+    if (currentNode) {
+      positions[currentNode.id] = { x: center.x, y: center.y, radius: 0, angle: 0 };
     }
-  }, [graphRef.current, nodes, links, isExpanded]);
 
-  const handleNodeClick = (node) => {
-    if (node.group !== 'central') {
-      console.log('Navigate to transaction:', node.id);
+    const otherNodes = nodes.filter((n) => n.id !== currentNode?.id);
+    const count = otherNodes.length;
+
+    otherNodes.forEach((node, idx) => {
+      // Spread nodes evenly around orbit rings
+      const angle = (idx / Math.max(count, 1)) * 2 * Math.PI - Math.PI / 2;
+      // Distance based on risk or index
+      const distance = 55 + ((idx % 3) + 1) * 26;
+      const x = center.x + distance * Math.cos(angle);
+      const y = center.y + distance * Math.sin(angle);
+      positions[node.id] = { x, y, radius: distance, angle };
+    });
+
+    return positions;
+  }, [nodes]);
+
+  const getNodeColor = (node) => {
+    if (node?.is_current) return { stroke: '#3b82f6', fill: '#1d4ed8', glow: 'rgba(59, 130, 246, 0.5)', text: 'text-blue-400' };
+    if (node?.risk_category === 'HIGH_RISK' || (node?.risk_score || 0) >= 0.75) {
+      return { stroke: '#f43f5e', fill: '#be123c', glow: 'rgba(244, 63, 94, 0.5)', text: 'text-rose-400' };
     }
+    if (node?.risk_category === 'MEDIUM_RISK' || (node?.risk_score || 0) >= 0.3) {
+      return { stroke: '#f59e0b', fill: '#b45309', glow: 'rgba(245, 158, 11, 0.5)', text: 'text-amber-400' };
+    }
+    return { stroke: '#10b981', fill: '#047857', glow: 'rgba(16, 185, 129, 0.5)', text: 'text-emerald-400' };
   };
 
-  const getNodeTooltip = (node) => {
-    if (!node) return null;
-    const groupConfig = GROUP_COLORS[node.group] || GROUP_COLORS.approved;
-    const isCentral = node.group === 'central';
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className={`p-4 rounded-xl border shadow-xl min-w-[220px] ${isCentral ? 'border-primary/30 bg-primary/5' : `border-${node.group === 'blocked' ? 'rose' : node.group === 'step_up' ? 'amber' : 'emerald'}-500/30`}`}
-        style={{ backgroundColor: '#13151B' }}
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <div className={`w-3 h-3 rounded-full ${isCentral ? 'animate-pulse' : ''}`} style={{ backgroundColor: groupConfig.node }} />
-          <span className="font-bold text-xs text-foreground">{isCentral ? 'CURRENT TRANSACTION' : node.fullLabel}</span>
-        </div>
-
-        <div className="space-y-2 text-[11px]">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Risk Score</span>
-            <span className="font-mono font-semibold" style={{ color: node.riskScore > 0.75 ? '#f43f5e' : node.riskScore > 0.3 ? '#f59e0b' : '#10b981' }}>
-              {(node.riskScore * 100).toFixed(1)}%
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Category</span>
-            <span className="font-semibold text-foreground">{node.riskCategory?.replace('_', ' ')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Action</span>
-            <span className="font-semibold text-foreground">{node.actionTaken?.replace('_', ' ')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Amount</span>
-            <span className="font-mono font-semibold text-foreground">₹{Number(node.amount || 0).toLocaleString('en-IN')}</span>
-          </div>
-          {node.sharedAttributes && node.sharedAttributes.length > 0 && (
-            <div className="pt-2 border-t border-border/40">
-              <div className="text-muted-foreground mb-1">Shared Attributes:</div>
-              <div className="flex flex-wrap gap-1">
-                {node.sharedAttributes.map(([attr, val]) => (
-                  <span
-                    key={attr}
-                    className="px-1.5 py-0.5 rounded text-[9px] font-medium border"
-                    style={{
-                      backgroundColor: `${ATTRIBUTE_COLORS[attr] || '#71717a'}20`,
-                      borderColor: `${ATTRIBUTE_COLORS[attr] || '#71717a'}60`,
-                      color: ATTRIBUTE_COLORS[attr] || '#a1a1aa'
-                    }}
-                  >
-                    {ATTRIBUTE_ICONS[attr] || ''} {ATTRIBUTE_LABELS[attr] || attr}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    );
-  };
-
-  const getLinkTooltip = (link) => {
-    if (!link) return null;
-    const attrColor = ATTRIBUTE_COLORS[link.attribute] || '#71717a';
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="p-3 rounded-xl border shadow-xl min-w-[200px]"
-        style={{ backgroundColor: '#13151B', borderColor: `${attrColor}60` }}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <span style={{ color: attrColor }}>{ATTRIBUTE_ICONS[link.attribute] || '🔗'}</span>
-          <span className="font-bold text-xs text-foreground">{ATTRIBUTE_LABELS[link.attribute] || link.attribute}</span>
-        </div>
-
-        <div className="space-y-1.5 text-[11px]">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Shared Value</span>
-            <span className="font-mono font-semibold text-foreground">{link.value || 'N/A'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Correlation Strength</span>
-            <span className="font-semibold" style={{ color: attrColor }}>
-              {link.correlationStrength} shared attribute{link.correlationStrength > 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Link Weight</span>
-            <span className="font-mono font-semibold text-foreground">{link.width}</span>
-          </div>
-        </div>
-      </motion.div>
-    );
+  const getNodeIcon = (type) => {
+    switch (type) {
+      case 'ip_address':
+        return <Globe className="w-3.5 h-3.5" />;
+      case 'card_bin':
+        return <CreditCard className="w-3.5 h-3.5" />;
+      case 'device_fingerprint':
+        return <Smartphone className="w-3.5 h-3.5" />;
+      case 'shipping_address':
+        return <MapPin className="w-3.5 h-3.5" />;
+      default:
+        return <Activity className="w-3.5 h-3.5" />;
+    }
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border/60 rounded-2xl overflow-hidden flex flex-col h-full"
-      style={{ minHeight: isExpanded ? '600px' : '400px' }}
+      transition={{ duration: 0.3, delay: 0.15 }}
+      className="bg-card border border-border/80 rounded-2xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden backdrop-blur-sm"
     >
-      <div className="p-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Users className="w-5 h-5 text-primary" />
+      {/* Background glow effects */}
+      <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+
+      <div>
+        {/* Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+              <Radio className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-foreground text-base">Fraud Ring Network Radar</h3>
+                <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  Graph Topology
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Velocity link analysis & connected syndicate correlation
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-sm text-foreground">Fraud Ring Radar (Network Analysis)</h3>
-            <p className="text-[10px] text-muted-foreground">
-              {metadata?.total_connections || historicalNodes.length} connection{historicalNodes.length !== 1 ? 's' : ''} detected in {metadata?.velocity_window_hours || 24}h window
-            </p>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-foreground bg-secondary/60 border border-border/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+              <Network className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{stats.total} Nodes</span>
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <AnimatePresence mode="wait">
-            {showLegend && (
-              <motion.div
-                key="legend"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex items-center gap-3 px-3 py-1.5 bg-secondary/50 rounded-lg border border-border/40"
-              >
-                {Object.entries(GROUP_COLORS).map(([key, config]) => {
-                  const count = key === 'central' ? 1 :
-                    key === 'blocked' ? blockedCount :
-                    key === 'step_up' ? stepUpCount : approvedCount;
-                  if (count === 0 && key !== 'central') return null;
-                  return (
-                    <span
-                      key={key}
-                      className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium"
-                      style={{
-                        backgroundColor: `${config.node}20`,
-                        borderColor: `${config.border}40`,
-                        color: config.border,
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                      }}
+        {/* Main Radar + Inspector Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-5 items-center">
+          {/* Radar Constellation Screen */}
+          <div className="md:col-span-7 bg-zinc-950 border border-border/50 rounded-xl p-3 flex flex-col items-center justify-center relative overflow-hidden aspect-square max-h-[300px] w-full">
+            {/* SVG Interactive Radar Canvas */}
+            <svg viewBox="0 0 300 300" className="w-full h-full max-w-[280px] max-h-[280px]">
+              <defs>
+                {/* Radar Sweep Gradient */}
+                <linearGradient id="radarSweep" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                </linearGradient>
+
+                {/* Node Glow Filters */}
+                <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="glow-rose" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* Concentric Polar Range Circles */}
+              <circle cx="150" cy="150" r="35" fill="none" stroke="#27272a" strokeWidth="1" strokeDasharray="2,2" />
+              <circle cx="150" cy="150" r="70" fill="none" stroke="#27272a" strokeWidth="1" />
+              <circle cx="150" cy="150" r="105" fill="none" stroke="#27272a" strokeWidth="1" strokeDasharray="3,3" />
+              <circle cx="150" cy="150" r="135" fill="none" stroke="#3f3f46" strokeWidth="1.2" />
+
+              {/* Crosshair Lines */}
+              <line x1="15" y1="150" x2="285" y2="150" stroke="#27272a" strokeWidth="1" />
+              <line x1="150" y1="15" x2="150" y2="285" stroke="#27272a" strokeWidth="1" />
+
+              {/* Distance Labels */}
+              <text x="153" y="48" fill="#71717a" fontSize="8" fontFamily="monospace">75%</text>
+              <text x="153" y="83" fill="#71717a" fontSize="8" fontFamily="monospace">50%</text>
+              <text x="153" y="118" fill="#71717a" fontSize="8" fontFamily="monospace">25%</text>
+
+              {/* Rotating Sweep Beam */}
+              <g className="origin-center" style={{ transformOrigin: '150px 150px' }}>
+                <circle
+                  cx="150"
+                  cy="150"
+                  r="135"
+                  fill="url(#radarSweep)"
+                  className="animate-spin"
+                  style={{ animationDuration: '6s', transformOrigin: '150px 150px' }}
+                />
+              </g>
+
+              {/* Connection Vector Links */}
+              {nodes.map((node) => {
+                if (node.is_current) return null;
+                const pos = nodePositions[node.id];
+                if (!pos) return null;
+                const color = getNodeColor(node);
+
+                return (
+                  <line
+                    key={`link-${node.id}`}
+                    x1="150"
+                    y1="150"
+                    x2={pos.x}
+                    y2={pos.y}
+                    stroke={color.stroke}
+                    strokeWidth="1.5"
+                    strokeDasharray={node.risk_score >= 0.7 ? "none" : "3,3"}
+                    strokeOpacity="0.6"
+                  />
+                );
+              })}
+
+              {/* Pulsing Central Ripple Ring */}
+              <circle cx="150" cy="150" r="18" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeOpacity="0.5" className="animate-ping" style={{ transformOrigin: '150px 150px', animationDuration: '3s' }} />
+
+              {/* Render Nodes as Interactive Circles */}
+              {nodes.map((node) => {
+                const pos = nodePositions[node.id] || { x: 150, y: 150 };
+                const isSelected = selectedNode?.id === node.id;
+                const color = getNodeColor(node);
+                const isCenter = node.is_current;
+                const radius = isCenter ? 14 : 11;
+
+                return (
+                  <g
+                    key={node.id}
+                    onClick={() => setSelectedNodeId(node.id)}
+                    className="cursor-pointer transition-transform hover:scale-110"
+                    style={{ transformOrigin: `${pos.x}px ${pos.y}px` }}
+                  >
+                    {/* Active Selection Glow Ring */}
+                    {isSelected && (
+                      <circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={radius + 6}
+                        fill="none"
+                        stroke={color.stroke}
+                        strokeWidth="2"
+                        strokeOpacity="0.8"
+                        className="animate-pulse"
+                      />
+                    )}
+
+                    {/* Node Core */}
+                    <circle
+                      cx={pos.x}
+                      cy={pos.y}
+                      r={radius}
+                      fill={color.fill}
+                      stroke={isSelected ? '#ffffff' : color.stroke}
+                      strokeWidth={isSelected ? "2.5" : "1.5"}
+                      filter={node.risk_score >= 0.7 ? "url(#glow-rose)" : "url(#glow-blue)"}
+                    />
+
+                    {/* Node Label Chip */}
+                    <text
+                      x={pos.x}
+                      y={pos.y + radius + 10}
+                      textAnchor="middle"
+                      fill="#e4e4e7"
+                      fontSize="8"
+                      fontFamily="monospace"
+                      fontWeight="bold"
                     >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: config.node }} />
-                      {config.label} ({count})
-                    </span>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                      {isCenter ? "CURRENT" : (node.label || node.id).substring(0, 10)}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
 
-          <div className="flex items-center gap-1">
-            {Object.entries(ATTRIBUTE_LABELS).map(([key, label]) => {
-              const count = links.filter(l => l.attribute === key).length;
-              if (count === 0) return null;
-              const isActive = selectedAttribute === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setSelectedAttribute(isActive ? null : key)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${
-                    isActive
-                      ? 'bg-primary/20 text-primary border border-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                  }`}
-                  style={{ borderColor: isActive ? attrColor + '60' : undefined }}
-                  title={`Filter by ${label} (${count} links)`}
-                >
-                  <span style={{ color: ATTRIBUTE_COLORS[key] }}>{ATTRIBUTE_ICONS[key]}</span>
-                  <span>{label.slice(0, 3)}</span>
-                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-                    style={{
-                      backgroundColor: isActive ? 'transparent' : `${ATTRIBUTE_COLORS[key]}30`,
-                      color: isActive ? ATTRIBUTE_COLORS[key] : ATTRIBUTE_COLORS[key],
-                    }}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            {/* Radar Bottom Legend */}
+            <div className="w-full flex items-center justify-between text-[10px] text-muted-foreground pt-1 px-2 font-mono">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500" /> Current Tx
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Clean
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500" /> Blocked
+              </span>
+            </div>
           </div>
 
-          <button
-            onClick={() => onToggleExpand?.(!isExpanded)}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-foreground hover:border-zinc-700/80 active:scale-[0.98] transition-all"
-            title={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            <Maximize2 className={`w-3.5 h-3.5 ${isExpanded ? 'rotate-45' : ''}`} />
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </button>
-        </div>
-      </div>
+          {/* Right Entity Inspector Panel */}
+          <div className="md:col-span-5 flex flex-col justify-between space-y-3">
+            <div className="bg-secondary/30 border border-border/50 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-primary" />
+                  <span>Entity Inspector</span>
+                </div>
+                {selectedNode?.is_current && (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase">
+                    Focused Node
+                  </span>
+                )}
+              </div>
 
-      <div className="relative flex-1 overflow-hidden">
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={{ nodes: processedNodes, links: processedLinks }}
-          nodeId="id"
-          nodeLabel="label"
-          nodeColor="color"
-          nodeCanvasObject={(node, ctx, globalScale) => {
-            const isCentral = node.group === 'central';
-            const isFiltered = node.opacity < 1;
-
-            ctx.globalAlpha = node.opacity;
-
-            if (isCentral) {
-              const time = Date.now() / 500;
-              const pulseSize = node.size + Math.sin(time) * 4;
-              const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, pulseSize);
-              gradient.addColorStop(0, node.glow);
-              gradient.addColorStop(1, 'transparent');
-              ctx.beginPath();
-              ctx.arc(0, 0, pulseSize, 0, 2 * Math.PI);
-              ctx.fillStyle = gradient;
-              ctx.fill();
-            }
-
-            ctx.beginPath();
-            ctx.arc(0, 0, node.size, 0, 2 * Math.PI);
-            ctx.fillStyle = node.color;
-            ctx.fill();
-
-            ctx.lineWidth = isCentral ? 3 : 2;
-            ctx.strokeStyle = node.borderColor;
-            ctx.stroke();
-
-            if (node.label && globalScale > 0.5) {
-              ctx.font = `${node.fontSize}px 'JetBrains Mono', monospace`;
-              ctx.fillStyle = isFiltered ? '#71717a' : '#fafafa';
-              ctx.textAlign = 'center';
-              ctx.fillText(node.label, 0, node.size + 12);
-            }
-          }}
-          linkSource="source"
-          linkTarget="target"
-          linkColor="color"
-          linkWidth="width"
-          linkLineDash="dash"
-          linkOpacity="opacity"
-          linkCurvature={0.15}
-          linkCanvasObject={(link, ctx) => {
-            if (link.opacity < 0.3) return;
-
-            const attrColor = ATTRIBUTE_COLORS[link.attribute] || '#71717a';
-            ctx.strokeStyle = attrColor;
-            ctx.lineWidth = link.width;
-            ctx.globalAlpha = link.opacity;
-            ctx.setLineDash(link.dash || []);
-          }}
-          linkLabel="label"
-          linkFont={isExpanded ? 10 : 9}
-          linkFontColor={link => ATTRIBUTE_COLORS[link.attribute] || '#71717a'}
-          onNodeClick={handleNodeClick}
-          nodeHoverTooltip={getNodeTooltip}
-          linkHoverTooltip={getLinkTooltip}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.4}
-          warmupTicks={isExpanded ? 100 : 50}
-          cooldownTicks={isExpanded ? 200 : 100}
-          cooldownTime={isExpanded ? 15000 : 8000}
-        />
-
-        {clusters && clusters.length > 0 && (
-          <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
-            <AnimatePresence>
-              {clusters.map((cluster, i) => (
-                <motion.div
-                  key={cluster.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="pointer-events-auto mb-2"
-                >
-                  <div
-                    className="px-3 py-2 rounded-lg text-[10px] font-medium border shadow-lg backdrop-blur-sm"
-                    style={{
-                      backgroundColor: cluster.severity === 'HIGH' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                      borderColor: cluster.severity === 'HIGH' ? 'rgba(244, 63, 94, 0.4)' : 'rgba(245, 158, 11, 0.4)',
-                      color: cluster.severity === 'HIGH' ? '#fb7185' : '#fbbf24',
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="font-bold">FRAUD CLUSTER DETECTED</span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold"
-                        style={{
-                          backgroundColor: cluster.severity === 'HIGH' ? 'rgba(244, 63, 94, 0.3)' : 'rgba(245, 158, 11, 0.3)',
-                        }}
-                      >
-                        {cluster.severity}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[10px] opacity-90">{cluster.description}</div>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {cluster.shared_attributes.map(attr => (
-                        <span
-                          key={attr.attribute}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-medium border"
-                          style={{
-                            backgroundColor: `${ATTRIBUTE_COLORS[attr.attribute] || '#71717a'}20`,
-                            borderColor: `${ATTRIBUTE_COLORS[attr.attribute] || '#71717a'}60`,
-                            color: ATTRIBUTE_COLORS[attr.attribute] || '#a1a1aa'
-                          }}
-                        >
-                          {ATTRIBUTE_ICONS[attr.attribute] || ''} {attr.display}
-                        </span>
-                      ))}
+              {selectedNode ? (
+                <div className="space-y-2.5 text-xs">
+                  {/* Node ID */}
+                  <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-border/40 font-mono">
+                    <div className="text-[10px] text-muted-foreground uppercase font-sans">Identifier</div>
+                    <div className="font-bold text-foreground truncate mt-0.5">
+                      {selectedNode.id}
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
 
-        <div className="absolute bottom-4 right-4 pointer-events-none z-10">
-          <div className="p-2 rounded-lg text-[10px] text-muted-foreground bg-zinc-950/80 border border-zinc-800/80 backdrop-blur-sm text-right pointer-events-auto">
-            <div className="font-medium text-foreground mb-1">Graph Controls</div>
-            <div className="space-y-1 text-[9px] opacity-70 font-mono">
-              <div>Drag: Pan</div>
-              <div>Scroll: Zoom</div>
-              <div>Click Node: Select</div>
-              <div>Hover: Details</div>
+                  {/* Attributes Grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 rounded-lg bg-zinc-950/80 border border-border/40">
+                      <div className="text-[9px] text-muted-foreground uppercase font-sans">Node Type</div>
+                      <div className="font-semibold text-foreground capitalize mt-0.5 flex items-center gap-1">
+                        {getNodeIcon(selectedNode.type)}
+                        <span>{selectedNode.type?.replace('_', ' ') || 'Transaction'}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-zinc-950/80 border border-border/40">
+                      <div className="text-[9px] text-muted-foreground uppercase font-sans">Risk Grade</div>
+                      <div
+                        className={`font-bold mt-0.5 ${
+                          (selectedNode.risk_score || 0) >= 0.75
+                            ? 'text-rose-400'
+                            : (selectedNode.risk_score || 0) >= 0.3
+                            ? 'text-amber-400'
+                            : 'text-emerald-400'
+                        }`}
+                      >
+                        {selectedNode.risk_category || `${((selectedNode.risk_score || 0) * 100).toFixed(0)}% Score`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedNode.amount !== undefined && selectedNode.amount > 0 && (
+                    <div className="p-2 rounded-lg bg-zinc-950/80 border border-border/40 flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">Order Value</span>
+                      <span className="font-mono font-bold text-foreground">
+                        ₹{Number(selectedNode.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-6 text-center text-muted-foreground text-xs">
+                  Click any node on the radar to inspect entity links.
+                </div>
+              )}
             </div>
+
+            {/* Syndicate Cluster Indicator */}
+            {clusters.length > 0 ? (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Syndicate Ring Alert</div>
+                  <div className="text-[10px] text-rose-200/80 mt-0.5">
+                    {clusters.length} shared device/IP identity ring(s) detected across recent checkout attempts.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="text-[11px] leading-tight">
+                  <strong>Isolated Context</strong> &middot; No velocity attack links detected.
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="p-4 border-t border-border/40 bg-secondary/20">
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
-            <div className="text-2xl font-bold font-mono text-rose-400">{blockedCount}</div>
-            <div className="text-[10px] text-muted-foreground">Blocked</div>
-          </div>
-          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <div className="text-2xl font-bold font-mono text-amber-400">{stepUpCount}</div>
-            <div className="text-[10px] text-muted-foreground">Step-Up Auth</div>
-          </div>
-          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-            <div className="text-2xl font-bold font-mono text-emerald-400">{approvedCount}</div>
-            <div className="text-[10px] text-muted-foreground">Approved</div>
-          </div>
-        </div>
-
-        {metadata?.is_velocity_attack && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="mt-3 p-3 rounded-lg border bg-rose-500/10 border-rose-500/30 flex items-center gap-2 animate-pulse"
-          >
-            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            <div className="text-xs text-rose-300">
-              <span className="font-bold">VELOCITY ATTACK DETECTED:</span>{' '}
-              {metadata.last_hour_count || 0} transactions in last hour, {blockedCount} blocked — coordinated carding pattern.
-            </div>
-          </motion.div>
-        )}
+      <div className="mt-5 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>Window: 24h Velocity Correlation</span>
+        <span>Entity Links: {nodes.length > 1 ? `${nodes.length - 1} Associated` : 'None'}</span>
       </div>
     </motion.div>
   );

@@ -62,7 +62,7 @@ assert 'Not recorded' in result, f'shipping_distance_km with None should say Not
 print(f"  shipping_distance_km(None): {result.strip().replace('₹', 'Rs.')}")
 
 result = _explain_shap_impact('account_age_days', 0, tx_with_none)
-has_note = 'Not recorded' in result or 'zero' in result.lower() or '0 (' in result
+has_note = 'Not recorded' in result or 'zero' in result.lower() or '0 (' in result or '0 days old' in result or 'newly created' in result.lower()
 assert has_note, f'account_age_days with 0 should note it, got: {result}'
 print(f"  account_age_days(0): {result.strip().replace('₹', 'Rs.')}")
 

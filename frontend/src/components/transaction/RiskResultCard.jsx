@@ -2,12 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2, AlertOctagon, HelpCircle,
-  ArrowUpRight, ArrowDownRight, Zap, ShieldAlert, CreditCard, Lock,
-  Users, Search, AlertTriangle
+  ShieldAlert, CreditCard, Lock
 } from 'lucide-react';
-import { humanizeFeature, explainImpact } from '../../lib/constants';
-import ThreatReportCard from './ThreatReportCard';
-import FraudRingRadar from '../dashboard/FraudRingRadar';
 
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_TVDhd488H3P2Sb";
 
@@ -342,64 +338,6 @@ export default function RiskResultCard({ result, transactionPayload }) {
             <span>Policy: <strong>Zero Merchant Loss</strong></span>
           </div>
         </div>
-      )}
-
-      {sortedShap.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-primary" />
-            <h4 className="text-sm font-semibold text-foreground/90">Influential Risk Drivers</h4>
-          </div>
-          <div className="space-y-3">
-            {sortedShap.map(([feature, impact]) => {
-              const isRisk = impact > 0;
-              const strength = explainImpact(impact);
-              const pct = Math.abs(impact * 100);
-              const barWidth = Math.min(pct * 3, 100);
-
-              return (
-                <div key={feature} className="space-y-1">
-                  <div className="flex justify-between items-baseline text-xs">
-                    <span className="font-medium text-foreground/80">{humanizeFeature(feature)}</span>
-                    <span className={`font-mono font-semibold flex items-center gap-0.5 ${isRisk ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {isRisk ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                      {isRisk ? '+' : '-'}{pct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] text-muted-foreground leading-none">
-                    <span>{isRisk ? `${strength} Fraud Risk Signal` : `Lowers Fraud Risk Score`}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden mt-1">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${isRisk ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                      style={{ width: `${barWidth}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {threat_report && (
-        <ThreatReportCard
-          report={threat_report}
-          riskScore={risk_score}
-          riskCategory={currentRiskLevel}
-          transactionId={result.transaction_id}
-        />
-      )}
-
-      {risk_network_data && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="mt-6"
-        >
-          <FraudRingRadar networkData={risk_network_data} />
-        </motion.div>
       )}
     </div>
   );

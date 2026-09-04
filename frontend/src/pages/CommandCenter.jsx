@@ -231,7 +231,7 @@ export function TransactionDetail({ tx }) {
           {tx.risk_category === 'LOW_RISK' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
           {tx.risk_category === 'MEDIUM_RISK' && <Shield className="w-4 h-4 text-amber-400" />}
           {tx.risk_category === 'HIGH_RISK' && <ShieldAlert className="w-4 h-4 text-red-400" />}
-          {actionLabels[tx.action_taken] || tx.action_taken.replace(/_/g, ' ')}
+          {actionLabels[tx.action_taken] || (tx.action_taken ? tx.action_taken.replace(/_/g, ' ') : 'Reviewed')}
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">{tx.explanation}</p>
       </div>

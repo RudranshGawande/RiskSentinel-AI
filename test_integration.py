@@ -158,9 +158,22 @@ res_copilot = requests.post(f"{BASE_URL}/copilot/chat", json=copilot_payload)
 if res_copilot.status_code == 200:
     data = res_copilot.json()
     print("   [OK] Co-Pilot Response:")
-    print(f"   {data['response'][:150]}...")
+    print(f"   {data['response'][:100]}...")
 else:
     print(f"   [FAIL] {res_copilot.text}")
+
+print("\n-----------------------------------------")
+
+# 7. Co-Pilot Autocomplete Search
+print("7. Testing /copilot/transactions/search endpoint...")
+res_search = requests.get(f"{BASE_URL}/copilot/transactions/search?q=TXN&limit=5")
+if res_search.status_code == 200:
+    data = res_search.json()
+    print(f"   [OK] Autocomplete Search Results: {len(data.get('results', []))} items found")
+    for item in data.get('results', [])[:2]:
+        print(f"     - {item['transaction_id']} (User: {item['user_id']}, Score: {item['risk_score']:.2f})")
+else:
+    print(f"   [FAIL] {res_search.text}")
 
 print("\n=========================================")
 print("  ALL TESTS COMPLETED")

@@ -7,7 +7,7 @@ export const FEATURE_LABELS = {
   amount: "Order Amount",
   shipping_distance_km: "Shipping Distance",
   promo_used: "Promo Code Used",
-  avs_match: "Address Verification",
+  avs_match: "Address Verification (AVS)",
   cvv_result: "CVV Match",
   three_ds_flag: "3-D Secure Auth",
   country_match: "Country Match",
@@ -18,6 +18,15 @@ export const FEATURE_LABELS = {
   merchant_category_gaming: "Gaming Category",
   merchant_category_grocery: "Grocery Category",
   merchant_category_travel: "Travel Category",
+  // UPI & Advanced Security Features
+  vpa_age_verified: "VPA Handle Age Verified (>30d)",
+  device_binding_verified: "UPI Device Binding Verified",
+  vpa_handle: "UPI VPA Handle",
+  payment_method: "Payment Method",
+  ip_address: "Client IP Address",
+  card_bin: "Card Issuer / BIN",
+  device_fingerprint: "Device Fingerprint",
+  shipping_address: "Shipping Address",
 };
 
 export function humanizeFeature(raw) {

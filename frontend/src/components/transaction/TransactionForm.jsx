@@ -227,7 +227,35 @@ export default function TransactionForm({ onSubmit, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+
+    const sanitizedPayload = {
+      ...formData,
+      transaction_id: formData.transaction_id?.trim() || generateTxId(),
+      user_id: formData.user_id?.trim() || "usr_anonymous",
+      account_age_days: parseInt(formData.account_age_days, 10) || 0,
+      total_transactions_user: parseInt(formData.total_transactions_user, 10) || 0,
+      avg_amount_user: parseFloat(formData.avg_amount_user) || 0.0,
+      amount: parseFloat(formData.amount) || 0.0,
+      shipping_distance_km: parseFloat(formData.shipping_distance_km) || 0.0,
+      promo_used: Number(formData.promo_used) || 0,
+      avs_match: Number(formData.avs_match) || 0,
+      cvv_result: Number(formData.cvv_result) || 0,
+      three_ds_flag: Number(formData.three_ds_flag) || 0,
+      country: formData.country || "IN",
+      bin_country: formData.bin_country || "IN",
+      channel: formData.channel || "web",
+      merchant_category: formData.merchant_category || "electronics",
+      ip_address: formData.ip_address || "127.0.0.1",
+      card_bin: formData.card_bin || "",
+      device_fingerprint: formData.device_fingerprint || "",
+      shipping_address: formData.shipping_address || "",
+      payment_method: formData.payment_method || "card",
+      vpa_handle: formData.vpa_handle || "",
+      device_binding_verified: Number(formData.device_binding_verified ?? 1),
+      vpa_age_verified: Number(formData.vpa_age_verified ?? 1),
+    };
+
+    onSubmit(sanitizedPayload);
     setFormData(prev => ({
       ...prev,
       transaction_id: generateTxId()
@@ -243,22 +271,42 @@ export default function TransactionForm({ onSubmit, loading }) {
           <h2 className="text-md font-bold text-foreground tracking-tight">Transaction Attributes</h2>
           <p className="text-xs text-zinc-500 mt-0.5 font-medium">Configure transaction telemetry for risk grading</p>
         </div>
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => handlePreset(cleanPreset)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 border border-emerald-500/20 active:scale-[0.98] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 border border-emerald-500/20 active:scale-[0.98] transition-all"
+            title="Clean Card Transaction"
           >
             <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-            Clean Preset
+            Clean Card
           </button>
           <button
             type="button"
             onClick={() => handlePreset(suspiciousPreset)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 text-rose-400 hover:bg-rose-500/15 border border-rose-500/20 active:scale-[0.98] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/10 text-rose-400 hover:bg-rose-500/15 border border-rose-500/20 active:scale-[0.98] transition-all"
+            title="Suspicious Card Transaction"
           >
             <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-            Anomaly Preset
+            Anomaly Card
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePreset(cleanUpiPreset)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 border border-blue-500/20 active:scale-[0.98] transition-all"
+            title="Clean UPI Transaction"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            Clean UPI
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePreset(suspiciousUpiPreset)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-400 hover:bg-amber-500/15 border border-amber-500/20 active:scale-[0.98] transition-all"
+            title="Suspicious UPI Transaction"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+            Anomaly UPI
           </button>
         </div>
       </div>

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database / SQLite
+*.db
+*.sqlite
+*.sqlite3
+audit_trail.db
+backend/audit_trail.db
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.output/
+.oxlintrc.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary / Scratch files
+implementation_plan
+*.tmp
+*.log

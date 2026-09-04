@@ -119,7 +119,17 @@ class DatabaseManager:
     # ── Write ────────────────────────────────────────────
 
     async def log_assessment(self, **kwargs):
-        """Insert a new audit row. Duplicates are allowed (same tx re-assessed)."""
+        """Insert a new audit row. Automatically heals schema if table was deleted."""
+        try:
+            await self._insert_assessment(**kwargs)
+        except Exception as e:
+            if "no such table" in str(e).lower():
+                await self.init_db()
+                await self._insert_assessment(**kwargs)
+            else:
+                raise
+
+    async def _insert_assessment(self, **kwargs):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
                 INSERT INTO risk_audit_log
@@ -131,7 +141,7 @@ class DatabaseManager:
                  three_ds_flag, country, bin_country, channel, merchant_category,
                  ip_address, card_bin, device_fingerprint, shipping_address,
                  payment_method, vpa_handle, device_binding_verified, vpa_age_verified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 kwargs["transaction_id"],
                 kwargs["user_id"],
@@ -200,6 +210,36 @@ class DatabaseManager:
                 (user_id, limit),
             )
             return [dict(r) for r in await cursor.fetchall()]
+
+    async def search_transactions(self, query: str = "", limit: int = 10) -> list[dict]:
+        """Search transactions by transaction_id, user_id, or IP address."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            q = (query or "").strip()
+            if q:
+                pattern = f"%{q}%"
+                cursor = await db.execute(
+                    """
+                    SELECT id, transaction_id, user_id, order_amount, risk_score,
+                           risk_category, action_taken, timestamp, ip_address
+                    FROM risk_audit_log
+                    WHERE transaction_id LIKE ? OR user_id LIKE ? OR ip_address LIKE ?
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (pattern, pattern, pattern, limit),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT id, transaction_id, user_id, order_amount, risk_score,
+                           risk_category, action_taken, timestamp, ip_address
+                    FROM risk_audit_log
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (limit,),
+                )
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
     # ── Read (paginated list) ────────────────────────────
 

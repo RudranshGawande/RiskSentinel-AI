@@ -73,8 +73,9 @@ app.add_middleware(
         "http://127.0.0.1:5175",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "*",
     ],
-    allow_origin_regex=r"https?://.*",
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,12 +84,16 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    tb = traceback.format_exc()
+    print(f"\n[GLOBAL ERROR HANDLER CAUGHT]: {exc}\n{tb}\n")
     return JSONResponse(
         status_code=500,
         content={
             "status": "ERROR",
             "message": "An internal error occurred. The risk engine has safely defaulted.",
             "detail": str(exc),
+            "traceback": tb,
         },
     )
 
@@ -100,6 +105,8 @@ app.include_router(analytics.router)
 app.include_router(copilot.router)
 
 
+@app.get("/", tags=["System"])
+@app.get("/health", tags=["System"])
 @app.get("/api/health", tags=["System"])
 async def health_check():
     return {"status": "ok", "version": "2.0", "engine": "RiskSentinel AI"}

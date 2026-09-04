@@ -182,6 +182,13 @@ def _explain_shap_impact(name: str, value: float, tx: dict) -> str:
 class LLMAgent:
     """Agentic wrapper using AIML API (anthropic/claude-3-opus-20240229)."""
 
+    FRAUD_ATTRIBUTES = {
+        "ip_address": "Shared IP",
+        "card_bin": "Shared Card BIN",
+        "device_fingerprint": "Shared Device",
+        "shipping_address": "Shared Shipping Address",
+    }
+
     def __init__(self, api_key: str = "", model_name: str = "anthropic/claude-3-opus-20240229"):
         self.api_key = api_key or os.getenv("AIML_API_KEY", "")
         self.model_name = model_name or "anthropic/claude-3-opus-20240229"
@@ -193,6 +200,8 @@ class LLMAgent:
                 self.client = OpenAI(
                     base_url="https://api.aimlapi.com/v1",
                     api_key=self.api_key.strip(),
+                    timeout=3.0,
+                    max_retries=0,
                 )
                 logger.info(f"LLMAgent initialized with AIML API model '{self.model_name}'")
             except Exception as e:
@@ -215,12 +224,17 @@ class LLMAgent:
                 ],
                 max_tokens=1024,
                 temperature=0.2,
+                timeout=3.0,
             )
             return response.choices[0].message.content
 
         try:
             return await asyncio.to_thread(_sync_call)
         except Exception as e:
+            err_msg = str(e).lower()
+            if "insufficient" in err_msg or "funds" in err_msg or "403" in err_msg or "permission" in err_msg or "unauthorized" in err_msg:
+                logger.warning(f"AIML API credit/auth issue ({e}). Switching to fast local template mode.")
+                self._is_api_available = False
             logger.error(f"AIML API Call Error with model {self.model_name}: {e}")
             return None
 
