@@ -79,29 +79,29 @@
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (React 19 + Vite + Tailwind CSS)                  │
-│  ┌──────────────┐  ┌────────────────┐  ┌──────────────┐  ┌────────────────────┐  │
-│  │ Command      │  │ Transaction    │  │ Risk Co-Pilot│  │ Fraud Ring Radar   │  │
-│  │ Center       │  │ Evaluator      │  │ (Chat)       │  │ (Network Graph)    │  │
-│  └──────┬───────┘  └───────┬────────┘  └──────┬───────┘  └────────┬───────────┘  │
+│  ┌──────────────┐  ┌────────────────┐  ┌──────────────┐  ┌────────────────────┐   │
+│  │ Command      │  │ Transaction    │  │ Risk Co-Pilot│  │ Fraud Ring Radar   │   │
+│  │ Center       │  │ Evaluator      │  │ (Chat)       │  │ (Network Graph)    │   │
+│  └──────┬───────┘  └───────┬────────┘  └──────┬───────┘  └────────┬───────────┘   │
 └─────────┼──────────────────┼──────────────────┼───────────────────┼───────────────┘
           │                  │                  │                   │
           ▼                  ▼                  ▼                   ▼
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│                       BACKEND (Async FastAPI + Uvicorn)                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────┐   │
-│  │ Assess Risk  │  │ Audit Logs   │  │ Analytics    │  │ Co-Pilot Chat       │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────────┬──────────┘   │
+│                       BACKEND (Async FastAPI + Uvicorn)                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────┐    │
+│  │ Assess Risk  │  │ Audit Logs   │  │ Analytics    │  │ Co-Pilot Chat       │    │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────────┬──────────┘    │
 └─────────┼──────────────────┼──────────────────┼───────────────────┼───────────────┘
           │                  │                  │                   │
           ▼                  ▼                  ▼                   ▼
 ┌───────────────────────────────────────────────────────────────────────────────────┐
 │                           SERVICES LAYER                                          │
-│  • ML Engine (XGBoost + Isolation Forest + SHAP)                                 │
-│  • Risk Engine (3-Tier Adaptive Auth & Smart 3DS)                                │
-│  • LLM Agent (Claude 3 Opus Threat Dossier Generator)                            │
-│  • Fraud Graph Engine (Entity Clustering & Velocity Analysis)                    │
-│  • Razorpay Integration Service (Order Creation & Telemetry)                     │
-│  • Async SQLite Audit Database & TTL Cache                                       │
+│  • ML Engine (XGBoost + Isolation Forest + SHAP)                                  │
+│  • Risk Engine (3-Tier Adaptive Auth & Smart 3DS)                                 │
+│  • LLM Agent (Claude 3 Opus Threat Dossier Generator)                             │
+│  • Fraud Graph Engine (Entity Clustering & Velocity Analysis)                     │
+│  • Razorpay Integration Service (Order Creation & Telemetry)                      │
+│  • Async SQLite Audit Database & TTL Cache                                        │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
