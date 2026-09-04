@@ -62,8 +62,9 @@ RiskSentinel AI is a production-grade risk management platform that combines sup
 │         │                │                │                │                │
 │         ▼                ▼                ▼                ▼                │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ ARTIFACTS: xgboost_model.pkl, isolation_forest.pkl, preprocessor.pkl,│   │
-│  │           shap_explainer.pkl, feature_names.json                    │    │
+│  │ ARTIFACTS: xgboost_model.pkl, isolation_forest.pkl,
+|  |  preprocessor.pkl,shap_explainer.pkl, feature_names.json            │    │
+│  │                              
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
