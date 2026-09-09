@@ -40,6 +40,7 @@
 
 ## 🎯 Problem & Solution
 
+
 ### ⚠️ The Challenge
 - **$48B+ Global Loss**: Digital payment fraud costs merchants tens of billions annually.
 - **India-Specific Fraud Vectors**: SIM swapping, device hijacking, velocity rings, and unverified VPAs exploit static rules.
